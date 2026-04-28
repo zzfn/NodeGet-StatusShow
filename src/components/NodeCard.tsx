@@ -2,9 +2,10 @@ import { ArrowDown, ArrowUp, Clock, type LucideIcon } from 'lucide-react'
 import { Badge } from './ui/badge'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
+import { Flag } from './Flag'
 import { StatusDot } from './StatusDot'
 import { bytes, pct, relativeAge, uptime } from '../utils/format'
-import { deriveUsage, displayName, distroLogo, osLabel, regionFlag, virtLabel } from '../utils/derive'
+import { deriveUsage, displayName, distroLogo, osLabel, virtLabel } from '../utils/derive'
 import { cn, loadColor } from '../utils/cn'
 import type { Node } from '../types'
 import type { ReactNode } from 'react'
@@ -16,7 +17,6 @@ interface Props {
 
 export function NodeCard({ node, onOpen }: Props) {
   const u = deriveUsage(node)
-  const flag = regionFlag(node.meta?.region)
   const tags = Array.isArray(node.meta?.tags) ? node.meta.tags : []
   const os = osLabel(node)
   const logo = distroLogo(node)
@@ -38,11 +38,7 @@ export function NodeCard({ node, onOpen }: Props) {
         <span className="font-semibold flex-1 min-w-0 truncate" title={displayName(node)}>
           {displayName(node)}
         </span>
-        {flag && (
-          <span className="shrink-0 text-base leading-none" title={node.meta?.region}>
-            {flag}
-          </span>
-        )}
+        <Flag code={node.meta?.region} className="shrink-0" />
       </div>
 
       {(os || virt) && (

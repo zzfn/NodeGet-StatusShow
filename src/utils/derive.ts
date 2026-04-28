@@ -32,12 +32,6 @@ export function osLabel(node: Node) {
   return [s.system_name, s.system_os_version || s.system_version].filter(Boolean).join(' ')
 }
 
-export function regionFlag(code?: string | null) {
-  const c = code?.trim().toUpperCase() || ''
-  if (!/^[A-Z]{2}$/.test(c)) return ''
-  return String.fromCodePoint(...[...c].map(ch => 0x1f1e6 + ch.charCodeAt(0) - 65))
-}
-
 const LOGO_BASE = `${import.meta.env.BASE_URL}linux-logo-icon/`
 
 const DISTROS = [

@@ -5,16 +5,10 @@ import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
+import { Flag } from './Flag'
 import { StatusDot } from './StatusDot'
 import { bytes, pct, relativeAge, uptime } from '../utils/format'
-import {
-  deriveUsage,
-  displayName,
-  distroLogo,
-  osLabel,
-  regionFlag,
-  virtLabel,
-} from '../utils/derive'
+import { deriveUsage, displayName, distroLogo, osLabel, virtLabel } from '../utils/derive'
 import { loadColor } from '../utils/cn'
 import type { HistorySample, Node } from '../types'
 
@@ -46,7 +40,6 @@ export function NodeDetail({ node, onClose }: { node: Node | null; onClose: () =
   const d = node.dynamic
   const s = node.static?.system
   const cpu = node.static?.cpu
-  const flag = regionFlag(node.meta?.region)
   const tags = node.meta?.tags ?? []
   const virt = virtLabel(node)
   const logo = distroLogo(node)
@@ -67,11 +60,7 @@ export function NodeDetail({ node, onClose }: { node: Node | null; onClose: () =
             <img src={logo} alt="" className="w-5 h-5 shrink-0 object-contain" loading="lazy" />
           )}
           <span className="font-semibold truncate min-w-0">{displayName(node)}</span>
-          {flag && (
-            <span className="text-base leading-none shrink-0" title={node.meta?.region}>
-              {flag}
-            </span>
-          )}
+          <Flag code={node.meta?.region} className="shrink-0" />
           <span className="hidden md:inline truncate text-xs font-mono text-muted-foreground">
             {node.uuid}
           </span>

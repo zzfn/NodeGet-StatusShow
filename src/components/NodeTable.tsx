@@ -2,9 +2,10 @@ import { Badge } from './ui/badge'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
+import { Flag } from './Flag'
 import { StatusDot } from './StatusDot'
 import { bytes, pct, relativeAge } from '../utils/format'
-import { deriveUsage, displayName, distroLogo, regionFlag, virtLabel } from '../utils/derive'
+import { deriveUsage, displayName, distroLogo, virtLabel } from '../utils/derive'
 import { cn, loadColor } from '../utils/cn'
 import type { Node } from '../types'
 
@@ -34,7 +35,6 @@ export function NodeTable({ nodes, onOpen }: Props) {
         <TableBody>
           {nodes.map(n => {
             const u = deriveUsage(n)
-            const flag = regionFlag(n.meta?.region)
             const logo = distroLogo(n)
             const virt = virtLabel(n)
             return (
@@ -59,8 +59,12 @@ export function NodeTable({ nodes, onOpen }: Props) {
                     <span className="truncate">{displayName(n)}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-center text-base leading-none">
-                  {flag || <span className="text-muted-foreground text-sm">—</span>}
+                <TableCell className="text-center">
+                  {n.meta?.region ? (
+                    <Flag code={n.meta.region} />
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {virt ? (

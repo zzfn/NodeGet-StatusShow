@@ -9,15 +9,17 @@
     <script>
       try {
         var t = localStorage.getItem('nodeget.theme')
-        if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
+        if (t !== 'light') {
           document.documentElement.classList.add('dark')
         }
       } catch (_) {}
     </script>
+    <link rel="stylesheet" href="./custom.css" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script src="./custom.js" defer></script>
   </body>
 </html>

@@ -7,7 +7,7 @@ const KEY = 'nodeget.theme'
 function initial(): Theme {
   const stored = localStorage.getItem(KEY)
   if (stored === 'light' || stored === 'dark') return stored
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'dark'
 }
 
 export function useTheme() {
