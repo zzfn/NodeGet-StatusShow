@@ -120,7 +120,7 @@ export function App() {
     )
   }
 
-  const logo = config.site_logo || config.site_log || DEFAULT_LOGO
+  const logo = config.site_logo || DEFAULT_LOGO
   const empty = list.length === 0
   const hasErrors = errors.length > 0
 

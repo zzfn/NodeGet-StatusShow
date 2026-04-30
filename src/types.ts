@@ -86,7 +86,6 @@ export interface Node {
 export interface SiteConfig {
   site_name?: string
   site_logo?: string
-  site_log?: string
   footer?: string
   site_tokens: { name: string; backend_url: string; token: string }[]
 }
