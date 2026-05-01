@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackendPool } from '../api/pool'
-import { dynamicSummaryMulti, kvGetMulti, listAgentUuids, staticDataMulti } from '../api/methods'
+import { dynamicSummaryMulti, kvGetMulti, listAgentUuids, queryNodeTcpPings, staticDataMulti } from '../api/methods'
 import { isOnline } from '../utils/status'
-import type { DynamicSummary, HistorySample, Node, NodeMeta, SiteConfig } from '../types'
+import type { DynamicSummary, HistorySample, Node, NodeMeta, SiteConfig, TcpPingRecord } from '../types'
 
 type Agent = Pick<Node, 'uuid' | 'source' | 'meta' | 'static'>
 
@@ -92,6 +92,7 @@ export function useNodes(config: SiteConfig | null) {
   const [history, setHistory] = useState<Map<string, HistorySample[]>>(new Map())
   const [errors, setErrors] = useState<BackendError[]>([])
   const [loading, setLoading] = useState(true)
+  const poolRef = useRef<BackendPool | null>(null)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -100,6 +101,7 @@ export function useNodes(config: SiteConfig | null) {
       return
     }
     const pool = new BackendPool(config.site_tokens)
+    poolRef.current = pool
     const sourceUuids = new Map<string, string[]>()
 
     const bootstrap = async () => {
@@ -206,9 +208,30 @@ export function useNodes(config: SiteConfig | null) {
       clearInterval(dynTimer)
       clearInterval(clockTimer)
       document.removeEventListener('visibilitychange', onVisible)
+      poolRef.current = null
       pool.close()
     }
   }, [config])
+
+  const fetchNodeTcpHistory = useCallback(async (uuid: string): Promise<TcpPingRecord[]> => {
+    const pool = poolRef.current
+    if (!pool) return []
+    const now = Date.now()
+    const from = now - 24 * 3600_000
+    const results: TcpPingRecord[] = []
+    await Promise.allSettled(
+      pool.entries.map(async entry => {
+        try {
+          const rows = await queryNodeTcpPings(entry.client, uuid, from, now)
+          for (const r of rows || []) {
+            if (!r.uuid || r.timestamp == null) continue
+            results.push({ t: r.timestamp, cron: r.cron_source ?? '未知', latency: r.task_event_result?.tcp_ping ?? null })
+          }
+        } catch {}
+      }),
+    )
+    return results.sort((a, b) => a.t - b.t)
+  }, [])
 
   const nodes = useMemo(() => {
     const now = Date.now()
@@ -219,11 +242,12 @@ export function useNodes(config: SiteConfig | null) {
         ...a,
         dynamic: dyn,
         history: history.get(uuid) || [],
+        tcpPings: [],
         online: isOnline(dyn?.timestamp, now),
       })
     }
     return out
   }, [agents, live, history, tick])
 
-  return { nodes, errors, loading }
+  return { nodes, errors, loading, fetchNodeTcpHistory }
 }

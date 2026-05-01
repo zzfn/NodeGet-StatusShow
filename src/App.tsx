@@ -26,7 +26,7 @@ function readHash() {
 
 export function App() {
   const { config, error: configError } = useConfig()
-  const { nodes, errors } = useNodes(config)
+  const { nodes, errors, fetchNodeTcpHistory } = useNodes(config)
 
   const [view, setView] = useState<View>(initialView)
   const [query, setQuery] = useState('')
@@ -183,6 +183,7 @@ export function App() {
         node={selectedNode}
         onClose={() => setSelected(null)}
         showSource={(config.site_tokens?.length ?? 0) > 1}
+        fetchTcpHistory={fetchNodeTcpHistory}
       />
     </div>
   )

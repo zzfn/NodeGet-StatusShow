@@ -73,6 +73,12 @@ export interface HistorySample {
   netOut: number
 }
 
+export interface TcpPingRecord {
+  t: number
+  cron: string
+  latency: number | null // null = 超时/丢包
+}
+
 export interface Node {
   uuid: string
   source: string
@@ -81,6 +87,7 @@ export interface Node {
   static: StaticData
   dynamic: DynamicSummary | null
   history: HistorySample[]
+  tcpPings: TcpPingRecord[]
 }
 
 export interface SiteConfig {

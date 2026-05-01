@@ -14,3 +14,25 @@ export const kvGetMulti = (
   c: RpcClient,
   items: { namespace: string; key: string }[],
 ) => c.call<{ namespace: string; key: string; value: unknown }[]>('kv_get_multi_value', { namespace_key: items })
+
+export interface TcpPingRow {
+  uuid: string
+  timestamp: number | null
+  success: boolean | null
+  task_event_result: { tcp_ping?: number } | null
+  cron_source: string | null
+}
+
+export const queryTcpPings = (c: RpcClient, from: number, to: number, limit = 500) =>
+  c.call<TcpPingRow[]>('task_query', {
+    task_data_query: {
+      condition: [{ type: 'tcp_ping' }, { timestamp_from_to: [from, to] }, { limit }],
+    },
+  })
+
+export const queryNodeTcpPings = (c: RpcClient, uuid: string, from: number, to: number, limit = 500) =>
+  c.call<TcpPingRow[]>('task_query', {
+    task_data_query: {
+      condition: [{ type: 'tcp_ping' }, { uuid }, { timestamp_from_to: [from, to] }, { limit }],
+    },
+  })

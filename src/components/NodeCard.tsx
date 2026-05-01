@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Clock, type LucideIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp, Clock, Signal, type LucideIcon } from 'lucide-react'
 import { Badge } from './ui/badge'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
@@ -7,7 +7,8 @@ import { StatusDot } from './StatusDot'
 import { bytes, pct, relativeAge, uptime } from '../utils/format'
 import { cpuLabel, deriveUsage, displayName, distroLogo, osLabel, virtLabel } from '../utils/derive'
 import { cn, loadColor } from '../utils/cn'
-import type { Node } from '../types'
+import { ispColor, shortCron } from '../utils/tcpping'
+import type { Node, TcpPingRecord } from '../types'
 import type { ReactNode } from 'react'
 
 export function NodeCard({ node }: { node: Node }) {
@@ -66,6 +67,18 @@ export function NodeCard({ node }: { node: Node }) {
             <Stat icon={Clock}>{uptime(u.uptime)}</Stat>
             <span className="ml-auto">{relativeAge(u.ts)}</span>
           </div>
+          {node.tcpPings.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Signal className="h-3 w-3 shrink-0" />
+              {latestPerCron(node.tcpPings).map(({ cron, latency }) => (
+                <span key={cron} className="inline-flex items-center gap-0.5">
+                  <span style={{ color: ispColor(cron) }}>●</span>
+                  <span>{shortCron(cron)}</span>
+                  <span className="ml-0.5">{latency.toFixed(0)}ms</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {tags.length > 0 && (
@@ -80,6 +93,18 @@ export function NodeCard({ node }: { node: Node }) {
       </Card>
     </a>
   )
+}
+
+function latestPerCron(pings: TcpPingRecord[]): { cron: string; latency: number }[] {
+  const latest = new Map<string, { t: number; latency: number }>()
+  for (const p of pings) {
+    if (p.latency == null) continue
+    const cur = latest.get(p.cron)
+    if (!cur || p.t > cur.t) latest.set(p.cron, { t: p.t, latency: p.latency })
+  }
+  return [...latest.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([cron, { latency }]) => ({ cron, latency }))
 }
 
 function Stat({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {

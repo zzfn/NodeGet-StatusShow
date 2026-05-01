@@ -1,6 +1,6 @@
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
@@ -9,7 +9,8 @@ import { StatusDot } from './StatusDot'
 import { bytes, pct, relativeAge, uptime } from '../utils/format'
 import { deriveUsage, displayName, distroLogo, osLabel, virtLabel } from '../utils/derive'
 import { strokeColor } from '../utils/cn'
-import type { HistorySample, Node } from '../types'
+import { ispColor, shortCron } from '../utils/tcpping'
+import type { HistorySample, Node, TcpPingRecord } from '../types'
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -22,9 +23,22 @@ interface Props {
   node: Node | null
   onClose: () => void
   showSource?: boolean
+  fetchTcpHistory?: (uuid: string) => Promise<TcpPingRecord[]>
 }
 
-export function NodeDetail({ node, onClose, showSource }: Props) {
+export function NodeDetail({ node, onClose, showSource, fetchTcpHistory }: Props) {
+  const [detailPings, setDetailPings] = useState<TcpPingRecord[] | null>(null)
+  const [loadingPings, setLoadingPings] = useState(false)
+
+  useEffect(() => {
+    if (!node || !fetchTcpHistory) { setDetailPings(null); setLoadingPings(false); return }
+    setDetailPings(null)
+    setLoadingPings(true)
+    fetchTcpHistory(node.uuid)
+      .then(r => { setDetailPings(r); setLoadingPings(false) })
+      .catch(() => setLoadingPings(false))
+  }, [node?.uuid, fetchTcpHistory])
+
   useEffect(() => {
     if (!node) return
     const onKey = (e: KeyboardEvent) => {
@@ -150,6 +164,10 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
           </Section>
         )}
 
+        {(loadingPings || (detailPings && detailPings.length > 0)) && (
+          <TcpPingChart pings={detailPings ?? []} loading={loadingPings} />
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <Section title="系统">
             <KV k="主机名" v={s?.system_host_name} />
@@ -260,6 +278,116 @@ interface SparkProps {
   stroke: string
   domain?: [number, number]
   format: (v: number) => string
+}
+
+function buildLatencyData(pings: TcpPingRecord[], cronNames: string[]) {
+  const BUCKET = 30_000
+  const snap = (t: number) => Math.round(t / BUCKET) * BUCKET
+  const acc = new Map<number, Map<string, number[]>>()
+  for (const p of pings) {
+    if (p.latency == null) continue
+    const t = snap(p.t)
+    const m = acc.get(t) ?? new Map<string, number[]>()
+    if (!acc.has(t)) acc.set(t, m)
+    const arr = m.get(p.cron) ?? []
+    arr.push(p.latency)
+    m.set(p.cron, arr)
+  }
+  return [...acc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, m]) => ({
+      t,
+      ...Object.fromEntries(
+        cronNames.map(c => {
+          const vals = m.get(c)
+          return [c, vals?.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null]
+        })
+      ),
+    }))
+}
+
+function ispStats(pings: TcpPingRecord[], cron: string) {
+  const records = pings.filter(p => p.cron === cron)
+  const vals = records.filter(p => p.latency != null).map(p => p.latency as number)
+  const lossRate = records.length > 0 ? ((records.length - vals.length) / records.length) * 100 : 0
+  const avg = vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+  const jitter = vals.length >= 2
+    ? vals.slice(1).reduce((s, v, i) => s + Math.abs(v - vals[i]!), 0) / (vals.length - 1)
+    : null
+  return { avg, jitter, lossRate }
+}
+
+function TcpPingChart({ pings, loading }: { pings: TcpPingRecord[]; loading?: boolean }) {
+  const cronNames = useMemo(() => [...new Set(pings.map(p => p.cron))].sort(), [pings])
+  const data = useMemo(() => buildLatencyData(pings, cronNames), [pings, cronNames])
+  const stats = useMemo(
+    () => Object.fromEntries(cronNames.map(c => [c, ispStats(pings, c)])),
+    [pings, cronNames],
+  )
+  return (
+    <Section title={loading ? 'TCP Ping 延迟  加载中…' : 'TCP Ping 延迟'}>
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <XAxis
+              dataKey="t"
+              hide
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              scale="time"
+            />
+            <YAxis
+              unit=" ms"
+              width={52}
+              stroke="#9ca3af"
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tickLine={false}
+              axisLine={false}
+              domain={(['auto', 'auto'] as const)}
+              padding={{ top: 16, bottom: 16 }}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              labelFormatter={t => new Date(t as number).toLocaleTimeString()}
+              formatter={(v: unknown, name: string) =>
+                v == null ? ['超时', shortCron(name)] : [`${(v as number).toFixed(1)} ms`, shortCron(name)]
+              }
+            />
+            <Legend
+              formatter={(v: string) => shortCron(v)}
+              wrapperStyle={{ fontSize: 12 }}
+            />
+            {cronNames.map((cron, i) => (
+              <Line
+                key={cron}
+                type="monotone"
+                dataKey={cron}
+                name={cron}
+                stroke={ispColor(cron, i)}
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls={true}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 grid gap-3 text-xs font-mono" style={{ gridTemplateColumns: `repeat(${cronNames.length}, 1fr)` }}>
+        {cronNames.map((cron, i) => {
+          const { avg, jitter, lossRate } = stats[cron]!
+          return (
+            <div key={cron} className="space-y-0.5">
+              <div className="font-semibold mb-1" style={{ color: ispColor(cron, i) }}>{shortCron(cron)}</div>
+              <div className="text-muted-foreground">均值 <span className="text-foreground">{avg != null ? `${avg.toFixed(1)} ms` : '—'}</span></div>
+              <div className="text-muted-foreground">抖动 <span className="text-foreground">{jitter != null ? `${jitter.toFixed(1)} ms` : '—'}</span></div>
+              <div className="text-muted-foreground">丢包 <span className={lossRate > 0 ? 'text-red-500' : 'text-foreground'}>{lossRate.toFixed(1)}%</span></div>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  )
 }
 
 function Spark({ data, dataKey, label, stroke, domain, format }: SparkProps) {
