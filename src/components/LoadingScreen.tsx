@@ -60,7 +60,7 @@ export function LoadingScreen() {
   return (
     <motion.div
       className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-8 select-none"
-      style={{ background: 'hsl(224 40% 4%)' }}
+      style={{ background: 'hsl(var(--background))' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.04, filter: 'blur(8px) brightness(2.5)' }}
