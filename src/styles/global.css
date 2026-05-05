@@ -255,12 +255,42 @@
   background: hsl(var(--nx-card-bg));
   border: 1px solid hsl(var(--nx-card-border));
   border-radius: var(--radius);
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
 }
 
+/* 扫描线伪元素，默认停在顶部上方（斜切探照灯） */
+.card-nexus::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 40%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    hsl(191 97% 55% / 0.08) 50%,
+    transparent 100%
+  );
+  transform: translateY(-110%) rotate(-18deg) scaleX(1.6);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* hover：提亮边框 + 霓虹光晕 + 触发扫描动画 */
 .card-nexus:hover {
-  border-color: hsl(var(--nx-card-hover-border));
+  border-color: hsl(191 97% 55% / 0.6);
+  box-shadow:
+    0 0 18px hsl(191 97% 55% / 0.12),
+    inset 0 0 12px hsl(191 97% 55% / 0.04);
+}
+
+.card-nexus:hover::after {
+  animation: nx-scan 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes nx-scan {
+  from { transform: translateY(-110%) rotate(-18deg) scaleX(1.6); }
+  to   { transform: translateY(210%) rotate(-18deg) scaleX(1.6); }
 }
 
 .card-online {}
