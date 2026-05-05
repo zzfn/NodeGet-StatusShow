@@ -1,88 +1,366 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
 @layer base {
+  /* =====================================================
+     浅色主题（默认）
+     主调：深海蓝-石墨，强调色：青蓝霓虹仍保留但更收敛
+     ===================================================== */
   :root {
-    --background: 220 33% 98%;
-    --foreground: 222 47% 11%;
+    /* shadcn 基础 token */
+    --background: 210 20% 97%;
+    --foreground: 220 25% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 220 25% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 217 91% 60%;
+    --popover-foreground: 220 25% 12%;
+    --primary: 191 85% 38%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 14% 92%;
-    --input: 220 14% 92%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
+    --secondary: 210 15% 93%;
+    --secondary-foreground: 220 25% 25%;
+    --muted: 210 15% 94%;
+    --muted-foreground: 220 15% 48%;
+    --accent: 210 15% 92%;
+    --accent-foreground: 220 25% 12%;
+    --destructive: 351 83% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 15% 86%;
+    --input: 210 15% 90%;
+    --ring: 191 85% 38%;
+    --radius: 0.5rem;
+
+    /* ---- NEXUS 扩展 token（浅色） ---- */
+    /* 主强调：青色（收敛，避免过于刺眼） */
+    --nx-accent: 191 75% 35%;
+    --nx-accent-glow: 191 75% 35% / 0.18;
+    --nx-accent-subtle: 191 75% 35% / 0.08;
+    --nx-accent-border: 191 75% 35% / 0.35;
+
+    /* 在线绿 */
+    --nx-online: 142 60% 35%;
+    --nx-online-glow: 142 60% 35% / 0.25;
+
+    /* 离线红 */
+    --nx-offline: 351 75% 50%;
+
+    /* 指标色 */
+    --nx-cpu: 191 75% 35%;
+    --nx-mem: 263 70% 55%;
+    --nx-disk: 30 85% 45%;
+
+    /* 文字层级 */
+    --nx-text-primary: 220 25% 12%;
+    --nx-text-secondary: 220 15% 38%;
+    --nx-text-muted: 220 12% 55%;
+    --nx-text-dim: 220 10% 68%;
+
+    /* 卡片边框 / 背景 */
+    --nx-card-bg: 0 0% 100%;
+    --nx-card-border: 210 15% 86%;
+    --nx-card-hover-border: 191 75% 35% / 0.45;
+    --nx-card-hover-shadow: 191 75% 35% / 0.08;
+
+    /* 导航栏 */
+    --nx-nav-bg: 0 0% 100% / 0.85;
+    --nx-nav-border: 210 15% 86%;
+    --nx-nav-shadow: 210 20% 50% / 0.12;
+
+    /* 扫描线 —— 浅色模式下禁用（透明） */
+    --nx-scan-color: 191 75% 35% / 0;
+    --nx-grid-line: 210 15% 70% / 0.7;
+
+    /* 背景渐变光晕 */
+    --nx-glow-1: 191 75% 35% / 0.04;
+    --nx-glow-2: 263 70% 55% / 0.03;
+    --nx-glow-3: 142 60% 35% / 0.02;
+
+    /* uptime bar */
+    --nx-upbar-bg: 210 15% 86%;
+
+    /* chip */
+    --nx-chip-bg: 0 0% 100%;
+    --nx-chip-border: 210 15% 82%;
+    --nx-chip-text: 220 15% 48%;
+    --nx-chip-active-bg: 191 75% 35% / 0.08;
+    --nx-chip-active-border: 191 75% 35% / 0.5;
+    --nx-chip-active-text: 191 75% 30%;
   }
+
+  /* =====================================================
+     深色主题
+     ===================================================== */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 5.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 217 91% 60%;
+    --background: 224 45% 3%;
+    --foreground: 210 40% 92%;
+    --card: 224 42% 5%;
+    --card-foreground: 210 40% 92%;
+    --popover: 224 42% 6%;
+    --popover-foreground: 210 40% 92%;
+    --primary: 191 97% 55%;
+    --primary-foreground: 224 45% 3%;
+    --secondary: 224 35% 9%;
+    --secondary-foreground: 210 40% 80%;
+    --muted: 224 35% 8%;
+    --muted-foreground: 220 20% 45%;
+    --accent: 224 35% 9%;
+    --accent-foreground: 210 40% 92%;
+    --destructive: 351 83% 61%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 30% 11%;
+    --input: 224 35% 9%;
+    --ring: 191 97% 55%;
+
+    /* ---- NEXUS 扩展 token（深色） ---- */
+    --nx-accent: 191 97% 55%;
+    --nx-accent-glow: 191 97% 55% / 0.2;
+    --nx-accent-subtle: 191 97% 55% / 0.08;
+    --nx-accent-border: 191 97% 55% / 0.35;
+
+    --nx-online: 142 76% 58%;
+    --nx-online-glow: 142 76% 58% / 0.5;
+
+    --nx-offline: 351 83% 61%;
+
+    --nx-cpu: 191 97% 55%;
+    --nx-mem: 263 85% 75%;
+    --nx-disk: 30 95% 62%;
+
+    --nx-text-primary: 210 35% 88%;
+    --nx-text-secondary: 220 20% 55%;
+    --nx-text-muted: 220 20% 42%;
+    --nx-text-dim: 220 15% 30%;
+
+    --nx-card-bg: 224 42% 5%;
+    --nx-card-border: 220 30% 11%;
+    --nx-card-hover-border: 191 97% 55% / 0.45;
+    --nx-card-hover-shadow: 191 97% 55% / 0.08;
+
+    --nx-nav-bg: 224 42% 5% / 0.85;
+    --nx-nav-border: 220 30% 11%;
+    --nx-nav-shadow: 224 45% 3% / 0.6;
+
+    --nx-scan-color: 191 97% 55% / 0.012;
+    --nx-grid-line: 220 30% 30% / 0.5;
+
+    --nx-glow-1: 191 97% 55% / 0.06;
+    --nx-glow-2: 263 85% 75% / 0.04;
+    --nx-glow-3: 142 76% 58% / 0.03;
+
+    --nx-upbar-bg: 220 30% 11%;
+
+    --nx-chip-bg: 224 42% 5%;
+    --nx-chip-border: 220 30% 14%;
+    --nx-chip-text: 220 20% 50%;
+    --nx-chip-active-bg: 191 97% 55% / 0.1;
+    --nx-chip-active-border: 191 97% 55% / 0.7;
+    --nx-chip-active-text: 191 97% 55%;
   }
-  * {
-    @apply border-border;
-  }
+
+  * { @apply border-border; }
+
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--nx-accent) / 0.25);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--nx-accent) / 0.5); }
+}
+
+/* ===== Animations ===== */
+@keyframes num-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px hsl(var(--nx-online) / 0.8),
+                0 0 8px hsl(var(--nx-online-glow));
+  }
+  50% {
+    box-shadow: 0 0 8px hsl(var(--nx-online) / 1.0),
+                0 0 18px hsl(var(--nx-online) / 0.5);
   }
 }
 
-.bg-soft {
-  background-color: hsl(220 33% 98%);
-  background-image:
-    radial-gradient(60rem 36rem at 12% -10%, rgba(99, 102, 241, 0.16), transparent 60%),
-    radial-gradient(48rem 32rem at 95% 0%, rgba(56, 189, 248, 0.18), transparent 60%),
-    radial-gradient(42rem 28rem at 85% 95%, rgba(244, 114, 182, 0.12), transparent 60%),
-    radial-gradient(38rem 30rem at 5% 90%, rgba(34, 197, 94, 0.10), transparent 60%);
+@keyframes pulse-ring {
+  0%   { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.num-flash { animation: num-in 0.2s ease-out; }
+
+/* ===== Background ===== */
+.bg-nexus {
+  background-color: hsl(var(--background));
+  background-image: none;
   background-attachment: fixed;
 }
 
-.dark .bg-soft {
-  background-color: hsl(var(--background));
-  background-image: radial-gradient(hsl(var(--border)) 1px, transparent 1px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(ellipse at top, black 40%, transparent 90%);
+/* ===== Scan line overlay ===== */
+.scan-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 140px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    hsl(var(--nx-scan-color)) 50%,
+    transparent 100%
+  );
+  animation: scan-line 9s linear infinite;
+}
+.dark .scan-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    hsl(220 30% 3% / 0.06) 3px,
+    hsl(220 30% 3% / 0.06) 4px
+  );
 }
 
-.card-soft {
-  background-color: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+/* ===== Cards ===== */
+.card-nexus {
+  position: relative;
+  background: hsl(var(--nx-card-bg));
+  border: 1px solid hsl(var(--nx-card-border));
+  border-radius: var(--radius);
+  transition: border-color 0.2s ease;
+  overflow: hidden;
+}
+
+.card-nexus:hover {
+  border-color: hsl(var(--nx-card-hover-border));
+}
+
+.card-online {}
+.card-offline {}
+
+/* ===== Status dots ===== */
+.status-online {
+  background: hsl(var(--nx-online));
+}
+
+.status-offline {
+  background: hsl(var(--nx-offline) / 0.4);
+}
+
+.status-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: pulse-ring 2.5s ease-out infinite;
+}
+
+.status-online-ring {
+  border: 1.5px solid hsl(var(--nx-online) / 0.6);
+}
+
+/* ===== Metric progress bars ===== */
+.bar-cpu  { background: hsl(var(--nx-cpu)); }
+.bar-mem  { background: hsl(var(--nx-mem)); }
+.bar-disk { background: hsl(var(--nx-disk)); }
+.bar-warn { background: hsl(45 90% 52%); }
+.bar-crit { background: hsl(351 80% 55%); }
+
+/* ===== Uptime bars ===== */
+.upbar-online  { background: hsl(var(--nx-online) / 0.45); }
+.upbar-offline { background: hsl(var(--nx-offline) / 0.25); }
+.upbar-empty   { background: hsl(var(--nx-upbar-bg)); }
+
+/* ===== Navbar strip ===== */
+.navbar-strip {
+  background: hsl(var(--nx-nav-bg));
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid hsl(var(--nx-nav-border));
+  box-shadow: 0 1px 24px hsl(var(--nx-nav-shadow));
+}
+
+/* 在线状态指示灯（navbar 用） */
+.online-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--nx-online));
+}
+
+/* ===== Legacy navbar (保留兼容) ===== */
+.navbar-nexus {
+  background: hsl(var(--nx-nav-bg));
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid hsl(var(--nx-nav-border));
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 8px 24px -12px rgba(15, 23, 42, 0.10);
+    0 0 0 1px hsl(var(--nx-accent) / 0.05),
+    0 8px 32px hsl(var(--nx-nav-shadow)),
+    inset 0 1px 0 hsl(var(--nx-accent) / 0.05);
 }
-.dark .card-soft {
-  background-color: hsl(var(--card));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+/* ===== Chips / Tags ===== */
+.chip-nexus {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--nx-chip-border));
+  background: hsl(var(--nx-chip-bg));
+  color: hsl(var(--nx-chip-text));
+  transition: all 0.15s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
+.chip-nexus:hover {
+  border-color: hsl(var(--nx-accent-border));
+  color: hsl(var(--nx-accent));
+  box-shadow: 0 0 6px hsl(var(--nx-accent-glow));
+}
+.chip-nexus-active {
+  border-color: hsl(var(--nx-chip-active-border));
+  background: hsl(var(--nx-chip-active-bg));
+  color: hsl(var(--nx-chip-active-text));
+  box-shadow: 0 0 10px hsl(var(--nx-accent-glow));
+}
+
+/* ===== View transitions ===== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ===== Legacy compat ===== */
+.bg-soft { @apply bg-nexus; }
+.card-soft { background: hsl(var(--nx-card-bg)); }

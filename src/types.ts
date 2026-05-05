@@ -6,6 +6,7 @@ export interface NodeMeta {
   virtualization: string
   lat: number | null
   lng: number | null
+  order: number
 }
 
 export interface StaticSystem {
@@ -66,11 +67,19 @@ export interface DynamicSummary {
 
 export interface HistorySample {
   t: number
+  online: boolean
+  rate?: number | null  // 桶内在线率 0-1，仅 fetchUptimeHistory 返回
   cpu: number | null
   mem: number | null
   disk: number | null
   netIn: number
   netOut: number
+}
+
+export interface TcpPingRecord {
+  t: number
+  cron: string
+  latency: number | null // null = 超时/丢包
 }
 
 export interface Node {
@@ -81,6 +90,7 @@ export interface Node {
   static: StaticData
   dynamic: DynamicSummary | null
   history: HistorySample[]
+  tcpPings: TcpPingRecord[]
 }
 
 export interface SiteConfig {
@@ -90,7 +100,7 @@ export interface SiteConfig {
   site_tokens: { name: string; backend_url: string; token: string }[]
 }
 
-export type View = 'cards' | 'table'
+export type View = 'cards' | 'table' | 'map'
 
 export interface Usage {
   cpu?: number

@@ -1,15 +1,17 @@
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Flag } from './Flag'
 import { StatusDot } from './StatusDot'
+import { UptimeBars } from './UptimeBars'
 import { bytes, pct, relativeAge, uptime } from '../utils/format'
 import { deriveUsage, displayName, distroLogo, osLabel, virtLabel } from '../utils/derive'
 import { strokeColor } from '../utils/cn'
-import type { HistorySample, Node } from '../types'
+import { ispColor, shortCron } from '../utils/tcpping'
+import type { HistorySample, Node, TcpPingRecord } from '../types'
 
 const TOOLTIP_STYLE = {
   background: 'hsl(var(--popover))',
@@ -22,9 +24,32 @@ interface Props {
   node: Node | null
   onClose: () => void
   showSource?: boolean
+  fetchTcpHistory?: (uuid: string) => Promise<TcpPingRecord[]>
+  fetchUptimeHistory?: (uuid: string) => Promise<HistorySample[]>
 }
 
-export function NodeDetail({ node, onClose, showSource }: Props) {
+export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUptimeHistory }: Props) {
+  const [detailPings, setDetailPings] = useState<TcpPingRecord[] | null>(null)
+  const [loadingPings, setLoadingPings] = useState(false)
+  const [uptimeHistory, setUptimeHistory] = useState<HistorySample[]>([])
+
+  useEffect(() => {
+    if (!node || !fetchTcpHistory) { setDetailPings(null); setLoadingPings(false); return }
+    setDetailPings(null)
+    setLoadingPings(true)
+    fetchTcpHistory(node.uuid)
+      .then(r => { setDetailPings(r); setLoadingPings(false) })
+      .catch(() => setLoadingPings(false))
+  }, [node?.uuid, fetchTcpHistory])
+
+  useEffect(() => {
+    if (!node || !fetchUptimeHistory) { setUptimeHistory([]); return }
+    setUptimeHistory([])
+    fetchUptimeHistory(node.uuid)
+      .then(r => setUptimeHistory(r))
+      .catch(() => {})
+  }, [node?.uuid, fetchUptimeHistory])
+
   useEffect(() => {
     if (!node) return
     const onKey = (e: KeyboardEvent) => {
@@ -40,6 +65,13 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
   }, [node, onClose])
 
   if (!node) return null
+
+  const uptimeOnline = uptimeHistory.filter(s => s.online).length
+  const uptimePct = uptimeHistory.length > 0 ? Math.round((uptimeOnline / uptimeHistory.length) * 100) : null
+  const uptimePctColor =
+    uptimePct === 100 ? 'hsl(142 76% 58%)' :
+    uptimePct !== null && uptimePct < 80 ? 'hsl(351 83% 61%)' :
+    'hsl(45 95% 60%)'
 
   const u = deriveUsage(node)
   const d = node.dynamic
@@ -69,9 +101,6 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
           )}
           <span className="font-semibold truncate min-w-0">{displayName(node)}</span>
           <Flag code={node.meta?.region} className="shrink-0" />
-          <span className="hidden md:inline truncate text-xs font-mono text-muted-foreground">
-            {node.uuid}
-          </span>
           <div className="ml-auto flex flex-wrap gap-1.5 shrink-0">
             {node.meta?.region && <Badge variant="secondary">{node.meta.region}</Badge>}
             {showSource && (
@@ -113,6 +142,26 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
           </div>
         </Section>
 
+        <Section
+          title="在线状态"
+          action={
+            uptimePct !== null ? (
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="text-muted-foreground">24h</span>
+                <span className="font-semibold tabular-nums" style={{ color: uptimePctColor }}>
+                  {uptimePct}%
+                </span>
+              </div>
+            ) : undefined
+          }
+        >
+          <UptimeBars history={uptimeHistory} online={node.online} barHeight="h-2.5" hidePct className="px-1" />
+          <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5 px-1">
+            <span>24h 前</span>
+            <span>现在</span>
+          </div>
+        </Section>
+
         {history.length > 1 && (
           <Section title={`近 ${history.length * 2} 秒趋势`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -148,6 +197,10 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
               />
             </div>
           </Section>
+        )}
+
+        {(loadingPings || (detailPings && detailPings.length > 0)) && (
+          <TcpPingChart pings={detailPings ?? []} loading={loadingPings} />
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -193,10 +246,13 @@ export function NodeDetail({ node, onClose, showSource }: Props) {
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <Card className="p-5">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">{title}</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
+        {action}
+      </div>
       {children}
     </Card>
   )
@@ -260,6 +316,161 @@ interface SparkProps {
   stroke: string
   domain?: [number, number]
   format: (v: number) => string
+}
+
+function applyEwma(
+  data: ReturnType<typeof buildLatencyData>,
+  cronNames: string[],
+  alpha: number,
+): ReturnType<typeof buildLatencyData> {
+  const last: Record<string, number | null> = Object.fromEntries(cronNames.map(c => [c, null]))
+  return data.map(point => {
+    const out: Record<string, unknown> = { t: point.t }
+    for (const cron of cronNames) {
+      const raw = point[cron] as number | null
+      if (raw == null) {
+        out[cron] = null
+      } else if (last[cron] == null) {
+        out[cron] = raw
+        last[cron] = raw
+      } else {
+        const v = alpha * raw + (1 - alpha) * last[cron]!
+        out[cron] = v
+        last[cron] = v
+      }
+    }
+    return out as ReturnType<typeof buildLatencyData>[number]
+  })
+}
+
+function buildLatencyData(pings: TcpPingRecord[], cronNames: string[]) {
+  const BUCKET = 30_000
+  const snap = (t: number) => Math.round(t / BUCKET) * BUCKET
+  // 每个桶内按 ISP 累积成功延迟，最终取均值
+  const acc = new Map<number, Map<string, number[]>>()
+  for (const p of pings) {
+    if (p.latency == null) continue
+    const t = snap(p.t)
+    const m = acc.get(t) ?? new Map<string, number[]>()
+    if (!acc.has(t)) acc.set(t, m)
+    const arr = m.get(p.cron) ?? []
+    arr.push(p.latency)
+    m.set(p.cron, arr)
+  }
+  return [...acc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, m]) => ({
+      t,
+      ...Object.fromEntries(
+        cronNames.map(c => {
+          const vals = m.get(c)
+          return [c, vals?.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null]
+        })
+      ),
+    }))
+}
+
+function ispStats(pings: TcpPingRecord[], cron: string) {
+  const records = pings.filter(p => p.cron === cron)
+  const vals = records.filter(p => p.latency != null).map(p => p.latency as number)
+  const lossRate = records.length > 0 ? ((records.length - vals.length) / records.length) * 100 : 0
+  const avg = vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+  const jitter = vals.length >= 2
+    ? vals.slice(1).reduce((s, v, i) => s + Math.abs(v - vals[i]!), 0) / (vals.length - 1)
+    : null
+  return { avg, jitter, lossRate }
+}
+
+function TcpPingChart({ pings, loading }: { pings: TcpPingRecord[]; loading?: boolean }) {
+  const cronNames = useMemo(() => [...new Set(pings.map(p => p.cron))].sort(), [pings])
+  const rawData = useMemo(() => buildLatencyData(pings, cronNames), [pings, cronNames])
+  const [smooth, setSmooth] = useState(true)
+  const data = useMemo(
+    () => smooth ? applyEwma(rawData, cronNames, 0.2) : rawData,
+    [smooth, rawData, cronNames],
+  )
+  const stats = useMemo(
+    () => Object.fromEntries(cronNames.map(c => [c, ispStats(pings, c)])),
+    [pings, cronNames],
+  )
+  return (
+    <Section
+      title={loading ? 'TCP Ping 延迟  加载中…' : 'TCP Ping 延迟'}
+      action={
+        <button
+          onClick={() => setSmooth(v => !v)}
+          className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+            smooth
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'text-muted-foreground border-border hover:border-primary/50'
+          }`}
+        >
+          平滑
+        </button>
+      }
+    >
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <XAxis
+              dataKey="t"
+              hide
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              scale="time"
+            />
+            <YAxis
+              unit=" ms"
+              width={52}
+              stroke="#9ca3af"
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tickLine={false}
+              axisLine={false}
+              domain={(['auto', 'auto'] as const)}
+              padding={{ top: 16, bottom: 16 }}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              labelFormatter={t => new Date(t as number).toLocaleTimeString()}
+              formatter={(v: unknown, name: string) =>
+                v == null ? ['超时', shortCron(name)] : [`${(v as number).toFixed(1)} ms`, shortCron(name)]
+              }
+            />
+            <Legend
+              formatter={(v: string) => shortCron(v)}
+              wrapperStyle={{ fontSize: 12 }}
+            />
+            {cronNames.map((cron, i) => (
+              <Line
+                key={cron}
+                type="monotone"
+                dataKey={cron}
+                name={cron}
+                stroke={ispColor(cron, i)}
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls={true}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 grid gap-3 text-xs font-mono" style={{ gridTemplateColumns: `repeat(${cronNames.length}, 1fr)` }}>
+        {cronNames.map((cron, i) => {
+          const { avg, jitter, lossRate } = stats[cron]!
+          return (
+            <div key={cron} className="space-y-0.5">
+              <div className="font-semibold mb-1" style={{ color: ispColor(cron, i) }}>{shortCron(cron)}</div>
+              <div className="text-muted-foreground">均值 <span className="text-foreground">{avg != null ? `${avg.toFixed(1)} ms` : '—'}</span></div>
+              <div className="text-muted-foreground">抖动 <span className="text-foreground">{jitter != null ? `${jitter.toFixed(1)} ms` : '—'}</span></div>
+              <div className="text-muted-foreground">丢包 <span className={lossRate > 0 ? 'text-red-500' : 'text-foreground'}>{lossRate.toFixed(1)}%</span></div>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  )
 }
 
 function Spark({ data, dataKey, label, stroke, domain, format }: SparkProps) {

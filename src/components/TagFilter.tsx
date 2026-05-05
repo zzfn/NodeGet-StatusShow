@@ -23,25 +23,12 @@ export function TagFilter({ tags, active, onChange }: Props) {
   )
 }
 
-function Chip({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
+function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        'px-3 py-1 text-xs rounded-full border transition-colors',
-        selected
-          ? 'bg-primary text-primary-foreground border-primary'
-          : 'bg-card text-foreground/80 border-border hover:bg-accent',
-      )}
+      className={cn('chip-nexus', selected && 'chip-nexus-active')}
     >
       {children}
     </button>
