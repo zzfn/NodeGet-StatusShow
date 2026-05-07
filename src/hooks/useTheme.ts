@@ -2,18 +2,13 @@ import { useEffect, useState } from 'react'
 
 type Theme = 'light' | 'dark'
 
-const KEY = 'nodeget.theme'
 const listeners = new Set<(t: Theme) => void>()
 
-let current: Theme = (() => {
-  const stored = localStorage.getItem(KEY)
-  return stored === 'light' || stored === 'dark' ? stored : 'dark'
-})()
+let current: Theme = 'dark'
 
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark')
   current = theme
-  localStorage.setItem(KEY, theme)
   listeners.forEach(fn => fn(theme))
 }
 
