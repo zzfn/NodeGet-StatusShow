@@ -5,13 +5,15 @@ import type { Topology, GeometryCollection } from 'topojson-specification'
 import { geoContains } from 'd3-geo'
 import worldAtlas from 'world-atlas/countries-110m.json'
 import { useTheme } from '../hooks/useTheme'
-import { bytes, pct } from '../utils/format'
+import { cn } from '../utils/cn'
+import { resolveCoords } from '../utils/coords'
 import type { Node } from '../types'
 
 const geoFeatures = feature(
   worldAtlas as unknown as Topology<{ countries: GeometryCollection }>,
   (worldAtlas as unknown as Topology<{ countries: GeometryCollection }>).objects.countries,
 )
+
 
 interface Point {
   uuid: string
@@ -110,9 +112,9 @@ export const WorldMap = memo(function WorldMap({
   const points = useMemo<Point[]>(() => {
     const out: Point[] = []
     for (const node of nodes) {
-      const lat = node.meta?.lat
-      const lng = node.meta?.lng
-      if (lat == null || lng == null) continue
+      const coords = resolveCoords(node.meta ?? undefined)
+      if (!coords) continue
+      const [lng, lat] = coords
       const d = node.dynamic
       const memPct = d?.used_memory && d?.total_memory
         ? d.used_memory / d.total_memory * 100
@@ -304,51 +306,16 @@ export const WorldMap = memo(function WorldMap({
         </div>
       )}
 
-      {/* 节点详情 tooltip */}
+      {/* 节点 tooltip：只显示名字 */}
       {clusterTooltip && (
         <div
-          className="pointer-events-none fixed z-50 min-w-[140px] rounded-lg border bg-popover p-2.5 text-xs text-popover-foreground shadow-lg"
+          className="pointer-events-none fixed z-50 rounded-md border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md"
           style={{ left: clusterTooltip.x + 14, top: clusterTooltip.y + 8 }}
         >
           {clusterTooltip.cluster.points.map((point, i) => (
-            <div key={point.uuid} className={i > 0 ? 'mt-2 pt-2 border-t border-border' : ''}>
-              <div className="flex items-center gap-1.5 font-medium">
-                <span className={point.online ? 'text-emerald-500' : 'text-rose-500'}>●</span>
-                <span>{point.name}</span>
-              </div>
-              {point.region && (
-                <div className="text-muted-foreground mt-0.5">{point.region}</div>
-              )}
-              {point.online && (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground mt-1">
-                  {point.cpu !== null && (
-                    <>
-                      <span>CPU</span>
-                      <span className="text-right font-mono">{pct(point.cpu / 100)}</span>
-                    </>
-                  )}
-                  {point.mem !== null && (
-                    <>
-                      <span>内存</span>
-                      <span className="text-right font-mono">{pct(point.mem / 100)}</span>
-                    </>
-                  )}
-                  {(point.netIn > 0 || point.netOut > 0) && (
-                    <>
-                      <span>↓ 入</span>
-                      <span className="text-right font-mono">{bytes(point.netIn)}/s</span>
-                      <span>↑ 出</span>
-                      <span className="text-right font-mono">{bytes(point.netOut)}/s</span>
-                    </>
-                  )}
-                  {point.uptime !== null && (
-                    <>
-                      <span>运行</span>
-                      <span className="text-right font-mono">{formatUptime(point.uptime)}</span>
-                    </>
-                  )}
-                </div>
-              )}
+            <div key={point.uuid} className={cn('flex items-center gap-1.5', i > 0 && 'mt-1')}>
+              <span className={point.online ? 'text-emerald-500' : 'text-rose-500'}>●</span>
+              <span className="font-medium">{point.name}</span>
             </div>
           ))}
         </div>

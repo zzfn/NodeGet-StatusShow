@@ -49,7 +49,8 @@ const META_KEYS = [
 const DYN_INTERVAL_MS = 2000
 const HISTORY_LIMIT = 120
 const TCP_PING_INTERVAL_MS = 30_000
-const TCP_PING_WINDOW_MS = 90_000
+const TCP_PING_WINDOW_MS = 6 * 3600_000  // 每次查最近 6 小时
+const TCP_PING_MAX = 4000                 // 每节点最多保留 4000 条（20s/条 × 3运营商 × 6h ≈ 3240）
 const UPTIME_BUCKETS = 80
 const UPTIME_BUCKET_MS = (24 * 3600_000) / UPTIME_BUCKETS
 
@@ -103,6 +104,7 @@ export function useNodes(config: SiteConfig | null) {
   const [tcpPingMap, setTcpPingMap] = useState<Map<string, TcpPingRecord[]>>(new Map())
   const [errors, setErrors] = useState<BackendError[]>([])
   const [loading, setLoading] = useState(true)
+  const firstDynRef = useRef(false)
   const poolRef = useRef<BackendPool | null>(null)
   const historyFetchedRef = useRef<Set<string>>(new Set())
   const [tick, setTick] = useState(0)
@@ -112,6 +114,8 @@ export function useNodes(config: SiteConfig | null) {
       setLoading(false)
       return
     }
+    setLoading(true)
+    firstDynRef.current = false
     const pool = new BackendPool(config.site_tokens)
     poolRef.current = pool
     const sourceUuids = new Map<string, string[]>()
@@ -169,7 +173,8 @@ export function useNodes(config: SiteConfig | null) {
       )
 
       await Promise.all([tickDynamic(), tickTcpPing()])
-      setLoading(false)
+      // 兜底：若所有节点真的离线（无 dynamic 数据），依然结束 loading
+      if (!firstDynRef.current) setLoading(false)
     }
 
     let dynPending = false
@@ -194,6 +199,10 @@ export function useNodes(config: SiteConfig | null) {
         for (const row of updates) liveRef.current.set(row.uuid, row)
 
         startTransition(() => {
+          if (!firstDynRef.current && updates.length > 0) {
+            firstDynRef.current = true
+            setLoading(false)
+          }
           setLiveVer(v => v + 1)
           setHistory(prev => {
             let next: Map<string, HistorySample[]> | null = null
@@ -239,7 +248,17 @@ export function useNodes(config: SiteConfig | null) {
       setTcpPingMap(prev => {
         const next = new Map(prev)
         for (const [uuid, records] of byUuid) {
-          next.set(uuid, records.sort((a, b) => a.t - b.t))
+          const existing = prev.get(uuid) ?? []
+          const merged = [...existing, ...records]
+          const seen = new Set<string>()
+          const deduped = merged.filter(r => {
+            const key = `${r.t}-${r.cron}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          deduped.sort((a, b) => a.t - b.t)
+          next.set(uuid, deduped.slice(-TCP_PING_MAX))
         }
         return next
       })

@@ -10,7 +10,7 @@ export function TagFilter({ tags, active, onChange }: Props) {
   if (tags.length === 0) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1">
       <Chip selected={active === null} onClick={() => onChange(null)}>
         全部
       </Chip>
@@ -28,7 +28,12 @@ function Chip({ selected, onClick, children }: { selected: boolean; onClick: () 
     <button
       type="button"
       onClick={onClick}
-      className={cn('chip-nexus', selected && 'chip-nexus-active')}
+      className={cn(
+        'px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] transition-colors',
+        selected
+          ? 'text-foreground bg-secondary'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
     >
       {children}
     </button>
