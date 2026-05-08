@@ -1,6 +1,8 @@
 const THEMES = ['starship', 'leading'] as const
 const picked = THEMES[Date.now() % THEMES.length]
 
+export const PICKED_THEME = picked
+
 export function Background() {
   const base = import.meta.env.BASE_URL
   return (

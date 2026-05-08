@@ -143,11 +143,7 @@ export function App() {
   }
 
   if (!config) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-        加载中…
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   const logo = config.site_logo || DEFAULT_LOGO
