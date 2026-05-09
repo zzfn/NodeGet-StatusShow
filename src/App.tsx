@@ -1,19 +1,25 @@
-import { useEffect, useMemo, useState, useDeferredValue } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import { AnimatePresence } from 'motion/react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Map as MapIcon } from 'lucide-react'
 import { LoadingScreen } from './components/LoadingScreen'
+import { Toaster } from './components/ui/sonner'
 import { Alert, AlertDescription, AlertTitle } from './components/ui/alert'
 import { useConfig } from './hooks/useConfig'
 import { useNodes } from './hooks/useNodes'
 import { Background } from './components/Background'
 import { Navbar } from './components/Navbar'
 import { Footer } from './components/Footer'
-import { NodeCard } from './components/NodeCard'
+import { WatchList } from './components/TradingView'
+import { MarketStrip } from './components/MarketStrip'
+import { IndexChart } from './components/IndexChart'
+import { TimeAndSales, useTickEvents } from './components/TimeAndSales'
+import { OptionsChain } from './components/OptionsChain'
+import { TopMovers } from './components/TopMovers'
+import { Heatmap } from './components/Heatmap'
+import { AlertBanner } from './components/AlertBanner'
 import { WorldMap } from './components/WorldMap'
 import { NodeDetail } from './components/NodeDetail'
 import { TagFilter } from './components/TagFilter'
-import { SidebarPanel } from './components/SidebarPanel'
-import { cn } from './utils/cn'
 import type { View } from './types'
 
 const DEFAULT_LOGO = `${import.meta.env.BASE_URL}logo.png`
@@ -22,42 +28,73 @@ function initialView(): View {
   return 'cards'
 }
 
-
-function readHash() {
-  return decodeURIComponent(window.location.hash.slice(1)) || null
-}
-
 export function App() {
   const { config, error: configError } = useConfig()
-  const { nodes, errors, loading, fetchNodeTcpHistory, fetchCardHistory, fetchUptimeHistory } = useNodes(config)
+  const { nodes, errors, loading, fetchNodeTcpHistory, fetchCardHistory, fetchUptimeHistory, prefetchAllHistory } = useNodes(config)
   const deferredNodes = useDeferredValue(nodes)
+
+  // 顶部 sticky 区高度（用于让 NodeDetail aside 贴在它下方而不是被遮挡）
+  const topStickyRef = useRef<HTMLDivElement>(null)
+  const [topH, setTopH] = useState(0)
+  useEffect(() => {
+    const el = topStickyRef.current
+    if (!el) return
+    const ro = new ResizeObserver(es => {
+      for (const e of es) setTopH(Math.round(e.contentRect.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // 左侧 WatchList 高度，用来限制右侧 aside 不超过左边
+  const [leftH, setLeftH] = useState(0)
+  const leftRoRef = useRef<ResizeObserver | null>(null)
+  const leftPaneRef = useCallback((el: HTMLDivElement | null) => {
+    if (leftRoRef.current) {
+      leftRoRef.current.disconnect()
+      leftRoRef.current = null
+    }
+    if (!el) {
+      setLeftH(0)
+      return
+    }
+    setLeftH(Math.round(el.getBoundingClientRect().height))
+    const ro = new ResizeObserver(es => {
+      for (const e of es) setLeftH(Math.round(e.contentRect.height))
+    })
+    ro.observe(el)
+    leftRoRef.current = ro
+  }, [])
+
+  // 节点列表加载后，主动 prefetch 所有节点最近 30 分钟历史，喂给全局 K 线图
+  const prefetchedRef = useRef(false)
+  useEffect(() => {
+    if (prefetchedRef.current) return
+    if (nodes.size === 0) return
+    prefetchedRef.current = true
+    prefetchAllHistory([...nodes.keys()], 30)
+  }, [nodes, prefetchAllHistory])
 
   const [view, setView] = useState<View>(initialView)
   const [query, setQuery] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [activeRegion, setActiveRegion] = useState<string | null>(null)
-  const [selected, setSelected] = useState<string | null>(readHash)
-  const [mobileSidebar, setMobileSidebar] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [isWide, setIsWide] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const handler = (e: MediaQueryListEvent) => setIsWide(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   useEffect(() => {
     if (config?.site_name) document.title = config.site_name
   }, [config?.site_name])
 
-  useEffect(() => {
-    const onHash = () => setSelected(readHash())
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
-  }, [])
-
-  useEffect(() => {
-    const target = selected ? `#${encodeURIComponent(selected)}` : ''
-    if (window.location.hash === target) return
-    if (selected) {
-      window.location.hash = encodeURIComponent(selected)
-    } else {
-      history.replaceState(null, '', window.location.pathname + window.location.search)
-    }
-  }, [selected])
+  // 选中节点不再写入 URL hash —— 仅作为本地状态弹窗使用
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -93,9 +130,7 @@ export function App() {
 
   const list = useMemo(() => {
     let arr = [...deferredNodes.values()].filter(n => !n.meta?.hidden)
-    if (activeRegion) arr = arr.filter(n => n.meta?.region?.trim().toUpperCase() === activeRegion)
-    if (activeTag) arr = arr.filter(n => n.meta?.tags?.includes(activeTag))
-
+    // tag / region 不再过滤，改由 WatchList 灰显未匹配项
     const q = query.trim().toLowerCase()
     if (q) {
       arr = arr.filter(n => {
@@ -125,9 +160,16 @@ export function App() {
       const bn = b.meta?.name || b.uuid
       return an.localeCompare(bn)
     })
-  }, [deferredNodes, query, activeTag, activeRegion])
+  }, [deferredNodes, query])
 
   const selectedNode = selected ? nodes.get(selected) || null : null
+
+  // hooks 必须在所有 early return 之前
+  const allNodesForEvents = useMemo(
+    () => [...deferredNodes.values()].filter(n => !n.meta?.hidden),
+    [deferredNodes],
+  )
+  const tickEvents = useTickEvents(allNodesForEvents)
 
 
   if (configError) {
@@ -149,7 +191,9 @@ export function App() {
   const logo = config.site_logo || DEFAULT_LOGO
   const empty = list.length === 0
   const hasErrors = errors.length > 0
-  const allNodes = [...deferredNodes.values()].filter(n => !n.meta?.hidden)
+  const allNodes = allNodesForEvents
+  // 只要已经有节点（来自 WS / 静态接口），就不再显示 LoadingScreen
+  const showLoading = loading && empty
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -163,83 +207,147 @@ export function App() {
         regionCounts={regionCounts}
         activeRegion={activeRegion}
         onRegionChange={setActiveRegion}
-        onMenuOpen={() => setMobileSidebar(true)}
+        onHome={() => {
+          setActiveRegion(null)
+          setActiveTag(null)
+          setQuery('')
+          setSelected(null)
+          setView('cards')
+        }}
       />
 
-      {/* 移动端侧边栏抽屉 */}
-      <div
-        className={cn('fixed inset-0 z-40 bg-black/50 transition-opacity lg:hidden', mobileSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none')}
-        onClick={() => setMobileSidebar(false)}
-      />
-      <aside className={cn(
-        'fixed left-0 top-0 bottom-0 z-50 w-64 overflow-y-auto sidebar-warm transition-transform duration-200 lg:hidden',
-        mobileSidebar ? 'translate-x-0' : '-translate-x-full',
-      )}>
-        <SidebarPanel nodes={allNodes} onViewMap={() => { setView('map'); setMobileSidebar(false) }} />
-      </aside>
+      {/* 主内容（全宽） */}
+      <main className="flex-1 min-w-0 pt-11 pb-0 space-y-0">
 
-      {/* 主体：侧边栏 + 内容区 */}
-      <div className="flex flex-1 pt-[60px]">
-        {/* 左侧边栏（桌面端） */}
-        <aside className="w-52 shrink-0 self-start sticky top-[60px] max-h-[calc(100vh-60px)] overflow-y-auto scrollbar-none sidebar-warm hidden lg:block">
-          <SidebarPanel nodes={allNodes} onViewMap={() => setView('map')} />
-        </aside>
+        {/* 地图视图 */}
+        {view === 'map' && (
+          <div className="space-y-3 max-w-4xl mx-auto p-4">
+            <WorldMap nodes={list} onSelect={setSelected} />
+          </div>
+        )}
 
-        {/* 右侧主内容 */}
-        <main className="flex-1 min-w-0 px-4 py-4 space-y-4">
+        {view !== 'map' && (<>
+          {/* 顶部 sticky 复合区：MarketStrip + Ticker + IndexChart + TagFilter，滚动 WatchList 时持续可见 */}
+          <div ref={topStickyRef} className="sticky top-11 z-30">
+            {/* 顶部：左 KPI + 右 Ticker 跑马灯（彭博/雅虎财经风），全宽紧贴 */}
+            {!showLoading && !empty && (
+              <div
+                className="flex flex-col lg:flex-row items-stretch overflow-hidden"
+                style={{
+                  background: 'hsl(var(--card) / 0.92)',
+                  borderBottom: '1px solid hsl(var(--border) / 0.6)',
+                }}
+              >
+                <div
+                  className="shrink-0 lg:border-r"
+                  style={{ borderColor: 'hsl(var(--border) / 0.6)' }}
+                >
+                  <MarketStrip nodes={allNodes} onViewMap={() => setView('map')} embedded showWorldMap={false} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setView('map')}
+                  className="flex shrink-0 items-center justify-center gap-2 px-4 py-2 lg:py-0 text-[10px] uppercase tracking-[0.2em] font-bold transition-colors hover:bg-[hsl(var(--secondary))] border-t lg:border-t-0 lg:border-l"
+                  style={{ color: 'hsl(var(--nx-text-secondary))', borderColor: 'hsl(var(--border) / 0.6)' }}
+                >
+                  <MapIcon className="h-3.5 w-3.5" />
+                  Map
+                </button>
+              </div>
+            )}
 
-          {/* 地图视图 */}
-          {view === 'map' && (
-            <div className="space-y-3 max-w-4xl mx-auto">
-              <WorldMap nodes={list} onSelect={setSelected} />
-            </div>
-          )}
+            {!showLoading && !empty && <AlertBanner nodes={allNodes} onSelect={setSelected} />}
 
-          {view !== 'map' && (<>
-          {/* 筛选栏 */}
-          <TagFilter tags={allTags} active={activeTag} onChange={setActiveTag} />
+            {/* 大盘指数走势图（聚合 avg CPU/MEM） */}
+            {!showLoading && !empty && (
+              <IndexChart nodes={allNodes} />
+            )}
+
+            {/* 筛选栏：紧贴上方边框、全宽嵌入式 */}
+            {allTags.length > 0 && (
+              <div
+                className="px-3 py-1"
+                style={{
+                  background: 'hsl(var(--card) / 0.95)',
+                  borderBottom: '1px solid hsl(var(--border) / 0.5)',
+                }}
+              >
+                <TagFilter tags={allTags} active={activeTag} onChange={setActiveTag} />
+              </div>
+            )}
+          </div>
 
           {/* 加载状态 */}
           <AnimatePresence>
-            {loading && !hasErrors && <LoadingScreen key="loading" />}
+            {showLoading && !hasErrors && <LoadingScreen key="loading" />}
           </AnimatePresence>
 
-          {!loading && empty && hasErrors && (
+          {!showLoading && empty && hasErrors && (
             <div className="py-20 text-center text-muted-foreground">暂无节点</div>
           )}
 
-          {/* 卡片视图 */}
-          {!loading && !empty && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {list.map(n => (
-                <NodeCard key={n.uuid} node={n} />
-              ))}
+          {/* 节点列表（双栏：左 Watchlist + 右 Detail/Time&Sales，紧贴 0 gap） */}
+          {!showLoading && !empty && (
+            <div className="flex items-start">
+              <div ref={leftPaneRef} className="flex-1 min-w-0">
+                <WatchList nodes={list} selected={selected} activeTag={activeTag} activeRegion={activeRegion} onSelect={setSelected} />
+              </div>
+              {isWide && (
+                <aside
+                  className="w-[420px] xl:w-[480px] 2xl:w-[560px] shrink-0 sticky overflow-hidden"
+                  style={{
+                    top: 44 + topH,
+                    height: leftH > 0
+                      ? `min(${leftH}px, calc(100vh - ${44 + topH + 28}px))`
+                      : `calc(100vh - ${44 + topH + 28}px)`,
+                    background: 'hsl(var(--card) / 0.95)',
+                    borderLeft: '1px solid hsl(var(--border) / 0.6)',
+                  }}
+                >
+                  <div className="h-full flex flex-col overflow-y-auto">
+                    <div className="shrink-0 border-b" style={{ borderColor: 'hsl(var(--border) / 0.6)' }}>
+                      <Heatmap nodes={allNodes} onSelect={setSelected} />
+                    </div>
+                    <div className="shrink-0 border-b" style={{ borderColor: 'hsl(var(--border) / 0.6)' }}>
+                      <TopMovers nodes={allNodes} onSelect={setSelected} />
+                    </div>
+                    <div className="shrink-0 border-b" style={{ borderColor: 'hsl(var(--border) / 0.6)' }}>
+                      <OptionsChain nodes={allNodes} onSelect={setSelected} />
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <TimeAndSales events={tickEvents} />
+                    </div>
+                  </div>
+                </aside>
+              )}
             </div>
           )}
-          </>)}
+        </>)}
 
-          {/* 错误提示 */}
-          {hasErrors && (
+        {/* 错误提示 */}
+        {hasErrors && (
+          <div className="px-3 py-2">
             <Alert variant="warning">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>{errors.length} 个后端错误</AlertTitle>
-              <AlertDescription>
-                <ul className="list-disc pl-5 space-y-1 mt-2">
-                  {errors.map((e, i) => (
-                    <li key={i}>
-                      <b>{e.source}</b>：
-                      {e.error instanceof Error ? e.error.message : String(e.error)}
-                    </li>
-                  ))}
-                </ul>
-              </AlertDescription>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{errors.length} 个后端错误</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc pl-5 space-y-1 mt-2">
+                {errors.map((e, i) => (
+                  <li key={i}>
+                    <b>{e.source}</b>：
+                    {e.error instanceof Error ? e.error.message : String(e.error)}
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
             </Alert>
-          )}
-        </main>
-      </div>
+          </div>
+        )}
+      </main>
 
-      <Footer text={config.footer} />
+      <Footer text={config.footer} nodes={allNodes} />
 
+      {/* 节点详情：始终以全屏模态显示 */}
       <NodeDetail
         node={selectedNode}
         onClose={() => setSelected(null)}
@@ -247,6 +355,7 @@ export function App() {
         fetchTcpHistory={fetchNodeTcpHistory}
         fetchUptimeHistory={fetchUptimeHistory}
       />
+      <Toaster />
     </div>
   )
 }

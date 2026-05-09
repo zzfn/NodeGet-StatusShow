@@ -97,9 +97,9 @@ function BandwidthChart({ netIn, netOut }: { netIn: number; netOut: number }) {
           }}
           cursor={{ stroke: 'hsl(var(--border))', strokeDasharray: '3 2' }}
         />
-        <Line type="monotone" dataKey="netIn" stroke="#3b82f6" strokeWidth={1.5}
+        <Line type="monotone" dataKey="netIn" stroke="hsl(142 71% 45%)" strokeWidth={1.5}
           dot={false} isAnimationActive={false} />
-        <Line type="monotone" dataKey="netOut" stroke="#10b981" strokeWidth={1.5}
+        <Line type="monotone" dataKey="netOut" stroke="hsl(0 72% 56%)" strokeWidth={1.5}
           dot={false} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
@@ -238,24 +238,58 @@ export function SidebarPanel({ nodes, onViewMap }: Props) {
     const totalUp   = nodes.reduce((s, n) => s + (n.dynamic?.total_transmitted ?? 0), 0)
     const totalDown = nodes.reduce((s, n) => s + (n.dynamic?.total_received ?? 0), 0)
 
-    return { total, online, offline, netUp, netDown, totalUp, totalDown }
+    // 全局平均 CPU/MEM 指数
+    const onlineNodes = nodes.filter(n => n.online && n.dynamic)
+    let cpuSum = 0, cpuCnt = 0
+    let memUsed = 0, memTotal = 0
+    for (const n of onlineNodes) {
+      if (n.dynamic?.cpu_usage != null) { cpuSum += n.dynamic.cpu_usage; cpuCnt++ }
+      memUsed  += n.dynamic?.used_memory ?? 0
+      memTotal += n.dynamic?.total_memory ?? 0
+    }
+    const avgCpu = cpuCnt ? cpuSum / cpuCnt : null
+    const avgMem = memTotal ? (memUsed / memTotal) * 100 : null
+
+    return { total, online, offline, netUp, netDown, totalUp, totalDown, avgCpu, avgMem }
   }, [nodes])
 
-  return (
-    <div className="p-4 flex flex-col gap-5">
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <p className="text-[9px] font-bold uppercase tracking-[0.22em] mb-2" style={{ color: 'hsl(var(--nx-text-muted))' }}>
+      {children}
+    </p>
+  )
 
-      {/* 节点状态 */}
+  return (
+    <div className="p-4 flex flex-col gap-5 font-mono">
+
+      {/* MARKET INDEX：全局聚合指标 */}
       <div>
-        <div className="font-mono leading-none tracking-tight"
-          style={{ fontSize: 48, fontWeight: 200, color: 'hsl(var(--foreground))' }}>
+        <SectionTitle>Market Index</SectionTitle>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="border px-2 py-1.5" style={{ borderColor: 'hsl(var(--border) / 0.5)', background: 'hsl(var(--card) / 0.5)' }}>
+            <div className="text-[9px] uppercase tracking-wider" style={{ color: 'hsl(var(--nx-text-dim))' }}>CPU</div>
+            <div className="text-lg font-bold tabular-nums" style={{ color: stats.avgCpu != null && stats.avgCpu >= 70 ? 'hsl(20 90% 60%)' : 'hsl(var(--nx-text-primary))' }}>
+              {stats.avgCpu != null ? `${stats.avgCpu.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="border px-2 py-1.5" style={{ borderColor: 'hsl(var(--border) / 0.5)', background: 'hsl(var(--card) / 0.5)' }}>
+            <div className="text-[9px] uppercase tracking-wider" style={{ color: 'hsl(var(--nx-text-dim))' }}>MEM</div>
+            <div className="text-lg font-bold tabular-nums" style={{ color: stats.avgMem != null && stats.avgMem >= 80 ? 'hsl(20 90% 60%)' : 'hsl(var(--nx-text-primary))' }}>
+              {stats.avgMem != null ? `${stats.avgMem.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BREADTH：在线/离线 涨跌家数 */}
+      <div>
+        <SectionTitle>Breadth</SectionTitle>
+        <div className="leading-none tracking-tight"
+          style={{ fontSize: 44, fontWeight: 200, color: 'hsl(var(--foreground))' }}>
           {stats.online}
           <span className="text-base font-normal" style={{ color: 'hsl(var(--muted-foreground))' }}>
             /{stats.total}
           </span>
-        </div>
-        <div className="text-[10px] uppercase tracking-widest mt-1"
-          style={{ color: 'hsl(var(--muted-foreground))' }}>
-          Online
         </div>
 
         {/* 每节点状态格 */}
@@ -264,45 +298,50 @@ export function SidebarPanel({ nodes, onViewMap }: Props) {
             <div
               key={n.uuid}
               className="flex-1"
-              style={{ background: n.online ? '#22c55e' : 'hsl(var(--border))' }}
+              style={{ background: n.online ? 'hsl(142 71% 45%)' : 'hsl(var(--border))' }}
             />
           ))}
         </div>
 
-        {/* OK / OFF 统计 */}
-        <div className="flex justify-between mt-2 text-[10px]"
-          style={{ color: 'hsl(var(--muted-foreground))' }}>
-          <span className="text-emerald-500">{stats.online} OK</span>
+        {/* 涨跌家数风格 */}
+        <div className="flex justify-between mt-2 text-[11px] tabular-nums">
+          <span className="flex items-center gap-1" style={{ color: 'hsl(142 71% 45%)' }}>
+            <span>▲</span>
+            <span className="font-bold">{stats.online}</span>
+            <span className="text-[9px] opacity-70">UP</span>
+          </span>
           {stats.offline > 0 && (
-            <span className="text-red-400">{stats.offline} OFF</span>
+            <span className="flex items-center gap-1" style={{ color: 'hsl(0 72% 56%)' }}>
+              <span>▼</span>
+              <span className="font-bold">{stats.offline}</span>
+              <span className="text-[9px] opacity-70">DOWN</span>
+            </span>
           )}
         </div>
       </div>
 
-      {/* 实时带宽 */}
+      {/* VOLUME：实时带宽 */}
       <div>
-        <p
-          className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-          style={{ color: 'hsl(var(--nx-text-muted))' }}
-        >
-          实时带宽
-        </p>
+        <SectionTitle>Volume — Live</SectionTitle>
         {/* 当前数值 */}
-        <div className="flex items-center justify-between text-xs mb-2">
-          <span className="flex items-center gap-1" style={{ color: '#3b82f6' }}>
+        <div className="flex items-center justify-between text-xs mb-2 tabular-nums">
+          <span className="flex items-center gap-1" style={{ color: 'hsl(0 72% 56%)' }}>
             <ArrowUp className="h-3 w-3" />
-            <span className="font-mono">{bytes(stats.netUp)}/s</span>
+            <span className="font-bold">{bytes(stats.netUp)}/s</span>
           </span>
-          <span className="flex items-center gap-1" style={{ color: '#10b981' }}>
+          <span className="flex items-center gap-1" style={{ color: 'hsl(142 71% 45%)' }}>
             <ArrowDown className="h-3 w-3" />
-            <span className="font-mono">{bytes(stats.netDown)}/s</span>
+            <span className="font-bold">{bytes(stats.netDown)}/s</span>
           </span>
         </div>
         {/* 历史折线图 */}
         <BandwidthChart netIn={stats.netDown} netOut={stats.netUp} />
         {/* 图例 */}
-        <div className="flex items-center gap-3 mt-1">
-          {[['#3b82f6', '↑ 上行'], ['#10b981', '↓ 下行']].map(([c, l]) => (
+        <div className="flex items-center gap-3 mt-1 tabular-nums">
+          {[
+            ['hsl(0 72% 56%)', '↑ TX'],
+            ['hsl(142 71% 45%)', '↓ RX'],
+          ].map(([c, l]) => (
             <span key={l} className="flex items-center gap-1" style={{ fontSize: 9, color: c }}>
               <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />
               {l}
@@ -311,26 +350,21 @@ export function SidebarPanel({ nodes, onViewMap }: Props) {
         </div>
       </div>
 
-      {/* 累计流量 */}
+      {/* AGGREGATE：累计流量 */}
       <div>
-        <p
-          className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-          style={{ color: 'hsl(var(--nx-text-muted))' }}
-        >
-          累计流量
-        </p>
+        <SectionTitle>Aggregate Volume</SectionTitle>
         <div className="flex flex-col gap-2">
           <BandwidthRow
             icon={<ArrowUp className="h-3.5 w-3.5" />}
-            label="总上行"
+            label="TX TOTAL"
             value={bytes(stats.totalUp)}
-            color="#3b82f6"
+            color="hsl(0 72% 56%)"
           />
           <BandwidthRow
             icon={<ArrowDown className="h-3.5 w-3.5" />}
-            label="总下行"
+            label="RX TOTAL"
             value={bytes(stats.totalDown)}
-            color="#22c55e"
+            color="hsl(142 71% 45%)"
           />
         </div>
       </div>

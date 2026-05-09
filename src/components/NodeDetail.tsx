@@ -26,9 +26,10 @@ interface Props {
   showSource?: boolean
   fetchTcpHistory?: (uuid: string) => Promise<TcpPingRecord[]>
   fetchUptimeHistory?: (uuid: string) => Promise<HistorySample[]>
+  inline?: boolean
 }
 
-export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUptimeHistory }: Props) {
+export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUptimeHistory, inline = false }: Props) {
   const [detailPings, setDetailPings] = useState<TcpPingRecord[] | null>(null)
   const [loadingPings, setLoadingPings] = useState(false)
   const [uptimeHistory, setUptimeHistory] = useState<HistorySample[]>([])
@@ -51,7 +52,7 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
   }, [node?.uuid, fetchUptimeHistory])
 
   useEffect(() => {
-    if (!node) return
+    if (!node || inline) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
@@ -62,7 +63,7 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [node, onClose])
+  }, [node, onClose, inline])
 
   if (!node) return null
 
@@ -89,10 +90,16 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
   const history = node.history || []
 
   return (
-    <div className="fixed inset-0 z-50 bg-background overflow-y-auto animate-in fade-in duration-150">
-      <div className="sticky top-0 z-10 backdrop-blur bg-background/85 border-b">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2 sm:gap-3">
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="返回" className="shrink-0">
+    <div
+      className={
+        inline
+          ? 'h-full overflow-y-auto bg-background'
+          : 'fixed inset-0 z-50 bg-background overflow-y-auto animate-in fade-in duration-150'
+      }
+    >
+      <div className={inline ? 'sticky top-0 z-10 backdrop-blur bg-background/85 border-b' : 'sticky top-0 z-10 backdrop-blur bg-background/85 border-b'}>
+        <div className={inline ? 'px-3 py-2 flex flex-wrap items-center gap-2' : 'max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2 sm:gap-3'}>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭" className="shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <StatusDot online={node.online} />
@@ -118,7 +125,7 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+      <div className={inline ? 'px-3 py-4 space-y-6' : 'max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8'}>
         <Section title="资源">
           <div className="flex flex-wrap justify-around gap-4 sm:gap-6">
             <Ring label="CPU" value={u.cpu} sub={loadAvg ?? undefined} />
@@ -184,15 +191,15 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
               <Spark
                 data={history}
                 dataKey="netIn"
-                label="下行"
-                stroke="#8b5cf6"
+                label="下行 RX"
+                stroke="hsl(142 71% 45%)"
                 format={v => `${bytes(v)}/s`}
               />
               <Spark
                 data={history}
                 dataKey="netOut"
-                label="上行"
-                stroke="#f59e0b"
+                label="上行 TX"
+                stroke="hsl(0 72% 56%)"
                 format={v => `${bytes(v)}/s`}
               />
             </div>
@@ -248,9 +255,20 @@ export function NodeDetail({ node, onClose, showSource, fetchTcpHistory, fetchUp
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
+    <Card
+      className="p-4"
+      style={{
+        background: 'hsl(var(--card) / 0.6)',
+        borderColor: 'hsl(var(--border) / 0.6)',
+      }}
+    >
+      <div className="flex items-center justify-between mb-3 pb-2 border-b" style={{ borderColor: 'hsl(var(--border) / 0.4)' }}>
+        <div
+          className="text-[10px] font-bold uppercase tracking-[0.22em]"
+          style={{ color: 'hsl(var(--nx-text-muted))' }}
+        >
+          {title}
+        </div>
         {action}
       </div>
       {children}
@@ -261,9 +279,14 @@ function Section({ title, children, action }: { title: string; children: ReactNo
 function KV({ k, v }: { k: string; v: ReactNode }) {
   if (v == null || v === '') return null
   return (
-    <div className="flex justify-between gap-3 text-sm py-1">
-      <span className="text-muted-foreground">{k}</span>
-      <span className="font-mono text-right truncate">{v}</span>
+    <div className="flex justify-between gap-3 text-xs py-1 border-b last:border-b-0" style={{ borderColor: 'hsl(var(--border) / 0.25)' }}>
+      <span
+        className="uppercase tracking-[0.15em] text-[10px] font-semibold"
+        style={{ color: 'hsl(var(--nx-text-muted))' }}
+      >
+        {k}
+      </span>
+      <span className="font-mono text-right truncate tabular-nums">{v}</span>
     </div>
   )
 }
@@ -295,13 +318,18 @@ function Ring({ label, value, sub }: { label: string; value?: number; sub?: stri
             />
           )}
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center text-base sm:text-lg font-semibold">
+        <div className="absolute inset-0 flex items-center justify-center text-base sm:text-lg font-bold font-mono tabular-nums">
           {pct(value)}
         </div>
       </div>
-      <div className="text-sm font-medium">{label}</div>
+      <div
+        className="text-[10px] font-bold uppercase tracking-[0.2em]"
+        style={{ color: 'hsl(var(--nx-text-secondary))' }}
+      >
+        {label}
+      </div>
       {sub && (
-        <div className="text-xs font-mono text-muted-foreground truncate max-w-full" title={sub}>
+        <div className="text-[10px] font-mono tabular-nums text-muted-foreground truncate max-w-full" title={sub}>
           {sub}
         </div>
       )}
@@ -477,12 +505,25 @@ function Spark({ data, dataKey, label, stroke, domain, format }: SparkProps) {
   const last = Number(data.at(-1)?.[dataKey] ?? 0)
   const id = `g-${dataKey}`
   return (
-    <div className="rounded-md border bg-card/50 p-3">
-      <div className="flex justify-between text-[11px] mb-1">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-mono">{format(last)}</span>
+    <div
+      className="p-2"
+      style={{
+        background: 'hsl(var(--card) / 0.5)',
+        border: '1px solid hsl(var(--border) / 0.5)',
+      }}
+    >
+      <div className="flex justify-between items-baseline mb-1">
+        <span
+          className="text-[9px] font-bold uppercase tracking-[0.18em]"
+          style={{ color: 'hsl(var(--nx-text-muted))' }}
+        >
+          {label}
+        </span>
+        <span className="font-mono tabular-nums text-[11px] font-bold" style={{ color: stroke }}>
+          {format(last)}
+        </span>
       </div>
-      <div className="h-20">
+      <div className="h-16">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
             <defs>

@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { BackendPool } from '../api/pool'
 import { dynamicSummaryMulti, kvGetMulti, listAgentUuids, queryNodeTcpPings, queryTcpPings, querySummaryHistory, staticDataMulti } from '../api/methods'
 import { isOnline } from '../utils/status'
@@ -118,17 +119,32 @@ export function useNodes(config: SiteConfig | null) {
     firstDynRef.current = false
     const pool = new BackendPool(config.site_tokens)
     poolRef.current = pool
+    toast.info(`Connecting ${pool.entries.length} backend${pool.entries.length > 1 ? 's' : ''}…`, { id: 'boot' })
     const sourceUuids = new Map<string, string[]>()
 
     const bootstrap = async () => {
-      const agentsRes = await pool.fanout(listAgentUuids)
-      setErrors(prev => [...prev, ...agentsRes.errors])
+      // 每个 backend 独立发进度 toast（不再用 fanout 阻塞等到全部完成）
+      const errs: BackendError[] = []
+      const okList: { source: string; rows: string[] }[] = []
+      await Promise.allSettled(
+        pool.entries.map(async entry => {
+          toast.info(`[${entry.name}] requesting agent list…`, { id: 'boot' })
+          try {
+            const rows = (await listAgentUuids(entry.client)) ?? []
+            toast.success(`[${entry.name}] ${rows.length} agents registered`, { id: 'boot' })
+            okList.push({ source: entry.name, rows })
+          } catch (e) {
+            toast.error(`[${entry.name}] list_agents failed`, { id: 'boot' })
+            errs.push({ source: entry.name, error: e })
+          }
+        }),
+      )
+      setErrors(prev => [...prev, ...errs])
 
       const seed = new Map<string, Agent>()
-      for (const { source, rows } of agentsRes.ok) {
-        const uuids = rows ?? []
-        sourceUuids.set(source, uuids)
-        for (const uuid of uuids) seed.set(uuid, blankAgent(uuid, source))
+      for (const { source, rows } of okList) {
+        sourceUuids.set(source, rows)
+        for (const uuid of rows) seed.set(uuid, blankAgent(uuid, source))
       }
       setAgents(seed)
 
@@ -136,6 +152,7 @@ export function useNodes(config: SiteConfig | null) {
         pool.entries.map(async entry => {
           const uuids = sourceUuids.get(entry.name) || []
           if (!uuids.length) return
+          toast.info(`[${entry.name}] loading meta+static · ${uuids.length} nodes…`, { id: 'boot' })
 
           const kvItems = uuids.flatMap(u => META_KEYS.map(k => ({ namespace: u, key: k })))
           const [meta, stat] = await Promise.allSettled([
@@ -169,6 +186,7 @@ export function useNodes(config: SiteConfig | null) {
             }
             return next
           })
+          toast.success(`[${entry.name}] meta+static loaded · ${uuids.length} nodes`, { id: 'boot' })
         }),
       )
 
@@ -202,6 +220,9 @@ export function useNodes(config: SiteConfig | null) {
           if (!firstDynRef.current && updates.length > 0) {
             firstDynRef.current = true
             setLoading(false)
+            // 最后一条简短显示，然后清空所有 boot toast
+            toast.success(`Dynamic stream live · +${updates.length} updates`, { id: 'boot', duration: 1500 })
+            setTimeout(() => toast.dismiss('boot'), 1600)
           }
           setLiveVer(v => v + 1)
           setHistory(prev => {
@@ -408,5 +429,45 @@ export function useNodes(config: SiteConfig | null) {
     }))
   }, [])
 
-  return { nodes, errors, loading, fetchNodeTcpHistory, fetchCardHistory, fetchUptimeHistory }
+  // 给所有节点 prefetch 较长的历史窗口（用于全局 K 线指数等）
+  // minutes: 拉取窗口长度（分钟）
+  const prefetchAllHistory = useCallback(async (uuids: string[], minutes = 30) => {
+    const pool = poolRef.current
+    if (!pool || !uuids.length) return
+    const now = Date.now()
+    const from = now - minutes * 60_000
+    const limit = Math.ceil((minutes * 60_000) / DYN_INTERVAL_MS) + 50
+    // 并发上限：每节点对所有 backend entry 并行；总体节点也并行（小项目通常没几十个节点）
+    await Promise.allSettled(
+      uuids.map(uuid =>
+        Promise.allSettled(
+          pool.entries.map(async entry => {
+            try {
+              const rows = await querySummaryHistory(entry.client, uuid, from, now, DYNAMIC_FIELDS, limit)
+              if (!rows?.length) return
+              startTransition(() => {
+                setHistory(prev => {
+                  const existing = prev.get(uuid) || []
+                  const merged = [...rows.map(sampleFrom), ...existing]
+                  const seen = new Set<number>()
+                  const deduped = merged.filter(s => {
+                    if (seen.has(s.t)) return false
+                    seen.add(s.t)
+                    return true
+                  })
+                  deduped.sort((a, b) => a.t - b.t)
+                  // 拉长 limit 以容纳长窗口数据，但每节点不超过 limit 条
+                  const next = new Map(prev)
+                  next.set(uuid, deduped.slice(-limit))
+                  return next
+                })
+              })
+            } catch {}
+          }),
+        ),
+      ),
+    )
+  }, [])
+
+  return { nodes, errors, loading, fetchNodeTcpHistory, fetchCardHistory, fetchUptimeHistory, prefetchAllHistory }
 }

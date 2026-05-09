@@ -11,6 +11,12 @@ export function TagFilter({ tags, active, onChange }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-1">
+      <span
+        className="text-[9px] font-bold uppercase tracking-[0.22em] px-1 mr-1"
+        style={{ color: 'hsl(var(--nx-text-muted))' }}
+      >
+        Filter ▸
+      </span>
       <Chip selected={active === null} onClick={() => onChange(null)}>
         全部
       </Chip>

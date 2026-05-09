@@ -11,7 +11,6 @@ export function LoadingScreen() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
-      {/* 背景视频（与 Background 共用同一主题，poster 已基于视频首帧生成） */}
       <video
         src={`${base}${PICKED_THEME}.mp4`}
         className="absolute inset-0 w-full h-full object-cover"
@@ -23,7 +22,6 @@ export function LoadingScreen() {
         poster={`${base}${PICKED_THEME}.webp`}
         aria-hidden
       />
-
     </motion.div>
   )
 }

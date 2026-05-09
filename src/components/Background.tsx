@@ -18,8 +18,15 @@ export function Background() {
         poster={`${base}${picked}.webp`}
       />
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, hsl(var(--background) / 0.3) 0%, hsl(var(--background) / 0.7) 100%)',
+        background: 'linear-gradient(to bottom, hsl(var(--background) / 0.55) 0%, hsl(var(--background) / 0.85) 100%)',
       }} />
+      {/* 细微扫描线纹理，强化交易屏幕氛围 */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.06] mix-blend-overlay"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 3px)',
+        }}
+      />
     </div>
   )
 }
