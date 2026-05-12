@@ -1,0 +1,353 @@
+import { memo, useMemo } from 'react'
+import { Flag } from './Flag'
+import { deriveUsage, displayName } from '../utils/derive'
+import { bytes } from '../utils/format'
+import type { Node, HistorySample } from '../types'
+
+// ── 三网颜色（与 wireframe 严格对齐） ────────────────────────────────────────
+const TRI_COLORS = {
+  tel: '#2f7fc0', // 电信 蓝
+  cu:  '#c14a4a', // 联通 红
+  mo:  '#3a8a55', // 移动 绿
+}
+
+const TRI_ISP_LABELS = ['电信', '联通', '移动'] as const
+const TRI_KEYS = ['tel', 'cu', 'mo'] as const
+
+function detectTriNet(cronNames: string[]): { key: 'tel' | 'cu' | 'mo'; cron: string }[] {
+  const result: { key: 'tel' | 'cu' | 'mo'; cron: string }[] = []
+  for (const [i, label] of TRI_ISP_LABELS.entries()) {
+    const found = cronNames.find(c => c.includes(label))
+    if (found) result.push({ key: TRI_KEYS[i], cron: found })
+  }
+  return result
+}
+
+// ── 波形路径 ──────────────────────────────────────────────────────────────────
+function buildWavePath(samples: HistorySample[], w: number, h: number): string {
+  const vals = samples.map(s => (s.netIn ?? 0) + (s.netOut ?? 0))
+  if (vals.length < 2) return ''
+  const min = Math.min(...vals)
+  const max = Math.max(...vals)
+  const range = max - min || 1
+  const pad = h * 0.1
+  const step = w / (vals.length - 1)
+  return vals
+    .map((v, i) => {
+      const x = (i * step).toFixed(1)
+      const y = (h - pad - ((v - min) / range) * (h - pad * 2)).toFixed(1)
+      return `${i === 0 ? 'M' : 'L'}${x},${y}`
+    })
+    .join(' ')
+}
+
+// ── 进度条行（严格对齐 wireframe .bar-row） ───────────────────────────────────
+function BarRow({ label, value }: { label: string; value: number | undefined }) {
+  const pct = Math.max(0, Math.min(100, value ?? 0))
+  const isAlert = pct >= 85
+  const isWarn  = !isAlert && pct >= 65
+
+  // wireframe: ink / warn / alert stripe; 3px on, 3px off diagonal
+  const stripeColor = isAlert
+    ? 'hsl(0 80% 55%)'
+    : isWarn
+      ? 'hsl(45 90% 55%)'
+      : 'hsl(var(--foreground))'
+
+  return (
+    // wireframe: grid-template-columns: 34px 1fr 36px; gap: 6px
+    <div
+      className="grid items-center"
+      style={{
+        gridTemplateColumns: '34px 1fr 36px',
+        gap: 6,
+        fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+        fontSize: 10,
+      }}
+    >
+      {/* lbl */}
+      <span style={{ color: 'hsl(var(--muted-foreground))', letterSpacing: '0.1em' }}>
+        {label}
+      </span>
+
+      {/* bar — wireframe: height 6px, border 1px, bg var(--bg-2) */}
+      <div
+        style={{
+          height: 6,
+          border: '1px solid hsl(var(--border) / 0.8)',
+          borderRadius: 2,
+          position: 'relative',
+          background: 'hsl(var(--secondary) / 0.6)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: `${pct}%`,
+            // wireframe: repeating-linear-gradient(45deg, color 0 3px, transparent 3px 6px)
+            backgroundImage: `repeating-linear-gradient(45deg, ${stripeColor} 0 3px, transparent 3px 6px)`,
+            opacity: isAlert ? 0.85 : isWarn ? 0.75 : 0.5,
+          }}
+        />
+      </div>
+
+      {/* val */}
+      <span style={{ color: 'hsl(var(--foreground))', textAlign: 'right' }}>
+        {value != null ? `${value.toFixed(0)}%` : '—'}
+      </span>
+    </div>
+  )
+}
+
+// ── 状态色 ────────────────────────────────────────────────────────────────────
+function resolveStatus(node: Node): 'ok' | 'warn' | 'alert' {
+  if (!node.online) return 'alert'
+  const u = deriveUsage(node)
+  if ((u.cpu ?? 0) >= 85 || (u.mem ?? 0) >= 95 || (u.disk ?? 0) >= 90) return 'alert'
+  if ((u.cpu ?? 0) >= 65 || (u.mem ?? 0) >= 80 || (u.disk ?? 0) >= 80) return 'warn'
+  return 'ok'
+}
+
+// wireframe accent/warn/alert colors
+const STATUS_COLOR = {
+  ok:    'hsl(142 71% 45%)',
+  warn:  'hsl(45 90% 55%)',
+  alert: 'hsl(0 80% 55%)',
+}
+
+// ── 单张卡片 ──────────────────────────────────────────────────────────────────
+export const GridCard = memo(function GridCard({
+  node,
+  onSelect,
+}: {
+  node: Node
+  onSelect?: (uuid: string) => void
+}) {
+  const u      = deriveUsage(node)
+  const status = resolveStatus(node)
+  const color  = STATUS_COLOR[status]
+
+  const cronNames = useMemo(
+    () => [...new Set(node.tcpPings.map(p => p.cron))].sort(),
+    [node.tcpPings],
+  )
+  const triNet = useMemo(() => detectTriNet(cronNames), [cronNames])
+  const hasTriNet = triNet.length >= 2
+
+  const lastPingByCron = useMemo(() => {
+    const m = new Map<string, number | null>()
+    for (const p of [...node.tcpPings].reverse()) {
+      if (!m.has(p.cron)) m.set(p.cron, p.latency)
+    }
+    return m
+  }, [node.tcpPings])
+
+  const W = 200
+  const H = 36
+  const wavePath = useMemo(() => buildWavePath(node.history, W, H), [node.history])
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect?.(node.uuid)}
+      className="text-left cursor-pointer relative flex flex-col"
+      style={{
+        // wireframe: border 1.5px, card.alert → alert border, card.warn → warn border
+        border: `1.5px solid ${status === 'ok' ? 'hsl(var(--border) / 0.7)' : color}`,
+        background: 'hsl(var(--card) / 0.78)',
+        borderRadius: 6,
+        // wireframe: padding: 12px 14px 10px; gap: 8px; min-height: 168px
+        padding: '12px 14px 10px',
+        gap: 8,
+        minHeight: 168,
+      }}
+    >
+
+      {/* 角标 tick — wireframe 的四角小框（::before top-left, ::after bottom-right） */}
+      <span
+        style={{
+          position: 'absolute', top: -3, left: -3, width: 7, height: 7,
+          border: `1.5px solid hsl(var(--border) / 0.6)`,
+          borderRight: 'none', borderBottom: 'none',
+          pointerEvents: 'none',
+        }}
+      />
+      <span
+        style={{
+          position: 'absolute', bottom: -3, right: -3, width: 7, height: 7,
+          border: `1.5px solid hsl(var(--border) / 0.6)`,
+          borderLeft: 'none', borderTop: 'none',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* ── head: flag · name · status-dot ── */}
+      {/* wireframe: .head { display:flex; align-items:center; gap:8px } */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 2 }}>
+        {/* wireframe flag: 22×16 text-code box; keep Flag image but match dimensions */}
+        <span style={{
+          width: 22, height: 16, border: '1px solid hsl(var(--border) / 0.7)',
+          borderRadius: 2, flexShrink: 0, overflow: 'hidden', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          background: 'hsl(var(--secondary) / 0.5)',
+        }}>
+          <Flag code={node.meta?.region} className="w-full h-full object-cover" />
+        </span>
+
+        {/* wireframe: .name { font-family:'Caveat' cursive; font-size:22px; font-weight:600 } */}
+        <span
+          style={{
+            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', lineHeight: 1,
+            fontFamily: 'var(--font-display, ui-sans-serif, system-ui)',
+            fontWeight: 700,
+            fontSize: 18,  // 近似 wireframe 22px Caveat
+            color: 'hsl(var(--foreground))',
+          }}
+        >
+          {displayName(node)}
+        </span>
+
+        {/* wireframe: .status-dot { width:9px; height:9px } */}
+        <span
+          style={{
+            width: 9, height: 9, borderRadius: '50%',
+            background: color, flexShrink: 0,
+          }}
+        />
+      </div>
+
+      {/* ── where: ISP · Location ── */}
+      {/* wireframe: font-size:10px; letter-spacing:.08em; color:var(--ink-3) */}
+      <div style={{
+        fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+        fontSize: 10,
+        color: 'hsl(var(--muted-foreground))',
+        letterSpacing: '0.08em',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {[node.source, node.meta?.region].filter(Boolean).join(' · ')}
+      </div>
+
+      {/* ── bars: CPU / MEM / DSK ── */}
+      {/* wireframe: .bars { display:flex; flex-direction:column; gap:4px } */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <BarRow label="CPU"  value={u.cpu} />
+        <BarRow label="MEM"  value={u.mem} />
+        <BarRow label="DISK" value={u.disk} />
+      </div>
+
+      {/* ── waveform: height 36px ── */}
+      {/* wireframe: .waveform { height:36px; margin-top:2px } */}
+      <div style={{ height: 36, marginTop: 2, color: 'hsl(var(--muted-foreground))' }}>
+        {wavePath ? (
+          <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+            <path
+              d={`${wavePath} L ${W} ${H} L 0 ${H} Z`}
+              fill="currentColor" opacity={0.08}
+            />
+            <path
+              d={wavePath} fill="none"
+              stroke="currentColor" strokeWidth={1.3}
+              strokeLinecap="round" strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.2, fontSize: 9, fontFamily: 'monospace' }}>
+            no data
+          </div>
+        )}
+      </div>
+
+      {/* ── foot / tri-net ── */}
+      {/* wireframe: .foot { border-top:1px dashed var(--line-soft); padding-top:6px; margin-top:auto } */}
+      <div style={{
+        marginTop: 'auto',
+        borderTop: '1px dashed hsl(var(--border) / 0.5)',
+        paddingTop: 6,
+        fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+        fontSize: 10,
+        color: 'hsl(var(--muted-foreground))',
+      }}>
+        {hasTriNet && node.online ? (
+          /* wireframe: .foot.tri { grid-template-columns: repeat(3,1fr); gap:4px } */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 4 }}>
+            {triNet.map(({ key, cron }) => {
+              const ping = lastPingByCron.get(cron)
+              const dot = TRI_COLORS[key]
+              const lbl = key === 'tel' ? '电' : key === 'cu' ? '联' : '移'
+              return (
+                <span
+                  key={key}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+                >
+                  {/* wireframe: .tri-pill::before { width:6px; height:6px; border-radius:50% } */}
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                  {/* wireframe: .lbl { font-family:'Patrick Hand'; font-size:11px } */}
+                  <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>{lbl}</span>
+                  {/* wireframe: .v { font-family:'JetBrains Mono'; font-size:10px; color:var(--ink) } */}
+                  <span style={{ fontSize: 10, color: 'hsl(var(--foreground))' }}>
+                    {ping != null ? `${ping}ms` : '—'}
+                  </span>
+                </span>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              {node.online && u.netIn != null && u.netOut != null
+                ? `↓${bytes(u.netIn)}/s ↑${bytes(u.netOut)}/s`
+                : ''}
+            </span>
+            {!node.online && (
+              <span style={{ color: STATUS_COLOR.alert, fontWeight: 700 }}>OFFLINE</span>
+            )}
+          </div>
+        )}
+      </div>
+    </button>
+  )
+}, (prev, next) =>
+  prev.node.uuid === next.node.uuid &&
+  prev.node.online === next.node.online &&
+  prev.node.dynamic?.timestamp === next.node.dynamic?.timestamp &&
+  prev.node.history === next.node.history &&
+  prev.node.tcpPings === next.node.tcpPings,
+)
+
+// ── 网格容器 ──────────────────────────────────────────────────────────────────
+export function NodeGrid({
+  nodes,
+  onSelect,
+}: {
+  nodes: Node[]
+  onSelect?: (uuid: string) => void
+}) {
+  if (!nodes.length) {
+    return (
+      <div
+        style={{ padding: '80px 0', textAlign: 'center', fontSize: 14, color: 'hsl(var(--muted-foreground))' }}
+      >
+        暂无节点
+      </div>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        padding: 12,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+        gap: 12,
+      }}
+    >
+      {nodes.map(n => (
+        <GridCard key={n.uuid} node={n} onSelect={onSelect} />
+      ))}
+    </div>
+  )
+}

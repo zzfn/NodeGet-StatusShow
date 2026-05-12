@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Menu, Moon, Sun } from 'lucide-react'
+import { Menu, Moon, Search as SearchIcon, Sun } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
 import { Flag } from './Flag'
 import { cn } from '../utils/cn'
@@ -10,7 +10,12 @@ interface Props {
   regions?: string[]
   regionCounts?: Map<string, number>
   activeRegion?: string | null
+  alertCount?: number
+  alertOnly?: boolean
+  query?: string
   onRegionChange?: (r: string | null) => void
+  onAlertToggle?: () => void
+  onQueryChange?: (q: string) => void
   onMenuOpen?: () => void
   onHome?: () => void
 }
@@ -25,12 +30,16 @@ export function Navbar({
   regions,
   regionCounts,
   activeRegion,
+  alertCount = 0,
+  alertOnly = false,
+  query = '',
   onRegionChange,
+  onAlertToggle,
+  onQueryChange,
   onMenuOpen,
   onHome,
 }: Props) {
   const { theme, toggle } = useTheme()
-  const hasRegions = (regions?.length ?? 0) > 1
   const isDark = theme === 'dark'
 
   const [now, setNow] = useState(() => new Date())
@@ -41,6 +50,34 @@ export function Navbar({
   const clock = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
 
   const divider = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
+  const pillBase: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '0 10px',
+    height: 24,
+    borderRadius: 999,
+    fontSize: 10,
+    fontFamily: 'ui-monospace, monospace',
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    border: '1px solid',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  }
+  const pillActive: React.CSSProperties = {
+    ...pillBase,
+    background: 'hsl(var(--foreground))',
+    color: 'hsl(var(--background))',
+    borderColor: 'hsl(var(--foreground))',
+  }
+  const pillInactive: React.CSSProperties = {
+    ...pillBase,
+    background: 'transparent',
+    color: 'hsl(var(--muted-foreground))',
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+  }
 
   return (
     <header
@@ -54,7 +91,7 @@ export function Navbar({
           : '1px solid rgba(0,0,0,0.08)',
       }}
     >
-      {/* 左：菜单 + LOGO + 站点名 + 市场状态 */}
+      {/* 左：LOGO + 站点名 */}
       <div
         className="flex items-center gap-3 pl-3 pr-4 shrink-0 border-r"
         style={{ borderColor: divider }}
@@ -90,44 +127,68 @@ export function Navbar({
         </a>
       </div>
 
-      {/* 中：region 切换 */}
-      <div className="flex-1 min-w-0 flex items-center px-2 overflow-hidden">
-        {hasRegions && (
-          <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none w-full">
-            <button
-              type="button"
-              onClick={() => onRegionChange?.(null)}
-              className={cn(
-                'px-2.5 h-7 text-[10px] uppercase tracking-[0.18em] font-bold font-mono transition-colors shrink-0 inline-flex items-center',
-                !activeRegion
-                  ? 'text-foreground bg-secondary'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              All
-            </button>
-            {regions!.map(r => (
-              <button
-                key={r}
-                type="button"
-                onClick={() =>
-                  onRegionChange?.(activeRegion === r ? null : r)
-                }
-                className={cn(
-                  'px-2.5 h-7 text-[10px] tracking-[0.18em] font-mono transition-colors shrink-0 inline-flex items-center gap-1.5',
-                  activeRegion === r
-                    ? 'text-foreground bg-secondary font-bold'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Flag code={r} />
-                <span className="uppercase">{r}</span>
-                <span className="opacity-50 tabular-nums">
-                  {regionCounts?.get(r)}
-                </span>
-              </button>
-            ))}
-          </div>
+      {/* 中：搜索 + filter pills */}
+      <div className="flex-1 min-w-0 flex items-center gap-2 px-3 overflow-x-auto scrollbar-none">
+        {/* 搜索框 */}
+        <div className="relative shrink-0">
+          <SearchIcon
+            className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none"
+            style={{ color: 'hsl(var(--muted-foreground))' }}
+          />
+          <input
+            type="search"
+            placeholder="搜索…"
+            value={query}
+            onChange={e => onQueryChange?.(e.target.value)}
+            style={{
+              height: 26,
+              paddingLeft: 22,
+              paddingRight: 8,
+              fontSize: 11,
+              fontFamily: 'ui-monospace, monospace',
+              background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+              border: `1px solid ${divider}`,
+              borderRadius: 6,
+              color: 'hsl(var(--foreground))',
+              outline: 'none',
+              width: 140,
+            }}
+          />
+        </div>
+
+        {/* All pill */}
+        <button
+          type="button"
+          style={!activeRegion && !alertOnly ? pillActive : pillInactive}
+          onClick={() => { onRegionChange?.(null) }}
+        >
+          All
+        </button>
+
+        {/* Region pills */}
+        {regions?.map(r => (
+          <button
+            key={r}
+            type="button"
+            style={activeRegion === r && !alertOnly ? pillActive : pillInactive}
+            onClick={() => { onRegionChange?.(activeRegion === r ? null : r) }}
+          >
+            <Flag code={r} className="w-3.5 h-2.5" />
+            {r}
+            <span style={{ opacity: 0.5 }}>{regionCounts?.get(r)}</span>
+          </button>
+        ))}
+
+        {/* Alert pill */}
+        {alertCount > 0 && (
+          <button
+            type="button"
+            style={alertOnly ? pillActive : { ...pillInactive, borderColor: 'hsl(0 80% 55% / 0.4)', color: 'hsl(0 80% 55%)' }}
+            onClick={onAlertToggle}
+          >
+            ⚠ Alert
+            <span style={{ opacity: 0.6 }}>{alertCount}</span>
+          </button>
         )}
       </div>
 
@@ -141,10 +202,7 @@ export function Navbar({
           style={{ color: 'hsl(var(--nx-text-secondary))' }}
         >
           <span className="opacity-50 uppercase">Local</span>
-          <span
-            className="tabular-nums"
-            style={{ color: 'hsl(var(--nx-text-primary))' }}
-          >
+          <span className="tabular-nums" style={{ color: 'hsl(var(--nx-text-primary))' }}>
             {clock}
           </span>
         </span>
@@ -158,13 +216,6 @@ export function Navbar({
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
       </div>
-
-      <style>{`
-        @keyframes nav-pulse {
-          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 hsl(142 71% 45% / 0.6); }
-          50% { opacity: 0.55; box-shadow: 0 0 0 4px hsl(142 71% 45% / 0); }
-        }
-      `}</style>
     </header>
   )
 }
