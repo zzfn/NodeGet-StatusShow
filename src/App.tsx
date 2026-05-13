@@ -14,6 +14,7 @@ import { AlertBanner } from './components/AlertBanner'
 import { WorldMap } from './components/WorldMap'
 import { NodeDetail } from './components/NodeDetail'
 import { NodeGrid } from './components/NodeGrid'
+import { UptimeTimeline } from './components/UptimeTimeline'
 import { deriveUsage } from './utils/derive'
 import { resolveCoords } from './utils/coords'
 import type { View, Node, TcpPingRecord, HistorySample } from './types'
@@ -742,6 +743,7 @@ export function App() {
                         </div>
                         {/* 排行榜 */}
                         <TopRanking nodes={allNodes} onSelect={uuid => navigate('/node/' + uuid)} />
+                        <UptimeTimeline nodes={allNodes} fetchUptimeHistory={fetchUptimeHistory} />
                       </div>
                     )}
 
