@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Menu, Moon, Search as SearchIcon, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MapPin, Menu, Moon, Search as SearchIcon, Sun } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
 import { Flag } from './Flag'
 import { cn } from '../utils/cn'
@@ -39,6 +39,15 @@ export function Navbar({
 }: Props) {
   const { theme, toggle } = useTheme()
   const isDark = theme === 'dark'
+
+  interface IPInfo { ip: string; asn?: string; org?: string; city?: string; country_code?: string }
+  const [ipInfo, setIpInfo] = useState<IPInfo | null>(null)
+  useEffect(() => {
+    fetch('https://ipapi.co/json/')
+      .then(r => r.json())
+      .then((d: IPInfo) => setIpInfo(d))
+      .catch(() => {})
+  }, [])
 
   const divider = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
   const pillBase: React.CSSProperties = {
@@ -186,6 +195,38 @@ export function Navbar({
         className="flex items-center gap-3 px-3 shrink-0 border-l"
         style={{ borderColor: divider }}
       >
+        {ipInfo && (
+          <span
+            className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-mono tracking-[0.08em] group relative cursor-default"
+            style={{ color: 'hsl(var(--muted-foreground))', flexShrink: 0 }}
+          >
+            <span style={{ color: 'hsl(var(--foreground))', opacity: 0.9 }}>你在</span>
+            <span>{[ipInfo.city, ipInfo.country_code].filter(Boolean).join(', ') || ipInfo.ip}</span>
+            {/* 悬浮详情 */}
+            <span
+              className="absolute right-0 top-full mt-1.5 hidden group-hover:flex flex-col gap-1 z-50"
+              style={{
+                background: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 5,
+                padding: '7px 10px',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 4px 16px hsl(0 0% 0% / 0.25)',
+              }}
+            >
+              {[
+                ['IP',  ipInfo.ip],
+                ['ASN', ipInfo.asn],
+                ['ISP', ipInfo.org],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <span key={k} className="flex gap-2">
+                  <span style={{ opacity: 0.45, width: 28 }}>{k}</span>
+                  <span style={{ color: 'hsl(var(--foreground))' }}>{v}</span>
+                </span>
+              ))}
+            </span>
+          </span>
+        )}
         {onlineViewers != null && onlineViewers > 0 && (
           <span
             className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-mono tracking-[0.12em]"
