@@ -13,6 +13,17 @@ export const staticDataMulti = (c: RpcClient, uuids: string[], fields: string[])
 export const dynamicSummaryMulti = (c: RpcClient, uuids: string[], fields: string[]) =>
   c.call<DynamicSummary[]>('agent_dynamic_summary_multi_last_query', { uuids, fields })
 
+export const querySummaryHistoryMulti = (
+  c: RpcClient,
+  uuids: string[],
+  from: number,
+  to: number,
+  fields: string[],
+) =>
+  c.call<DynamicSummary[]>('agent_query_dynamic_summary_history_multi', {
+    query: { uuids, from, to, fields },
+  })
+
 export const querySummaryHistory = (
   c: RpcClient,
   uuid: string,
@@ -31,6 +42,17 @@ export const querySummaryHistory = (
       ],
     },
   })
+
+export interface SummaryBucket {
+  t: number
+  count: number
+  [field: string]: number | null | undefined
+}
+
+export const querySummaryBuckets = (
+  c: RpcClient,
+  query: { uuid: string; from: number; to: number; buckets: number; fields: string[] },
+) => c.call<SummaryBucket[]>('agent_query_dynamic_summary_buckets', { query })
 
 export const kvGetMulti = (
   c: RpcClient,

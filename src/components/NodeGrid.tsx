@@ -1,6 +1,6 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState, useCallback } from 'react'
 import { Flag } from './Flag'
-import { deriveUsage, displayName } from '../utils/derive'
+import { cpuLabel, deriveUsage, displayName } from '../utils/derive'
 import { bytes } from '../utils/format'
 import type { Node, HistorySample } from '../types'
 
@@ -44,8 +44,8 @@ function buildWavePath(samples: HistorySample[], w: number, h: number): string {
 // ── 进度条行（严格对齐 wireframe .bar-row） ───────────────────────────────────
 function BarRow({ label, value }: { label: string; value: number | undefined }) {
   const pct = Math.max(0, Math.min(100, value ?? 0))
-  const isAlert = pct >= 85
-  const isWarn  = !isAlert && pct >= 65
+  const isAlert = pct >= 80
+  const isWarn  = !isAlert && pct >= 60
 
   // wireframe: ink / warn / alert stripe; 3px on, 3px off diagonal
   const stripeColor = isAlert
@@ -102,15 +102,14 @@ function BarRow({ label, value }: { label: string; value: number | undefined }) 
 }
 
 // ── 状态色 ────────────────────────────────────────────────────────────────────
-function resolveStatus(node: Node): 'ok' | 'warn' | 'alert' {
-  if (!node.online) return 'alert'
+function resolveStatus(node: Node): 'ok' | 'warn' | 'alert' | 'offline' {
+  if (!node.online) return 'offline'
   const u = deriveUsage(node)
-  if ((u.cpu ?? 0) >= 85 || (u.mem ?? 0) >= 95 || (u.disk ?? 0) >= 90) return 'alert'
-  if ((u.cpu ?? 0) >= 65 || (u.mem ?? 0) >= 80 || (u.disk ?? 0) >= 80) return 'warn'
+  if ((u.cpu ?? 0) >= 80 || (u.mem ?? 0) >= 85 || (u.disk ?? 0) >= 85) return 'alert'
+  if ((u.cpu ?? 0) >= 60 || (u.mem ?? 0) >= 70 || (u.disk ?? 0) >= 70) return 'warn'
   return 'ok'
 }
 
-// wireframe accent/warn/alert colors
 const STATUS_COLOR = {
   ok:    'hsl(142 71% 45%)',
   warn:  'hsl(45 90% 55%)',
@@ -148,6 +147,34 @@ export const GridCard = memo(function GridCard({
   const H = 36
   const wavePath = useMemo(() => buildWavePath(node.history, W, H), [node.history])
 
+  // 波形悬浮
+  const waveVals = useMemo(
+    () => node.history.map(s => (s.netIn ?? 0) + (s.netOut ?? 0)),
+    [node.history],
+  )
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+
+  const hoverPoint = useMemo(() => {
+    if (hoverIdx === null || waveVals.length < 2) return null
+    const min = Math.min(...waveVals)
+    const max = Math.max(...waveVals)
+    const range = max - min || 1
+    const pad = H * 0.1
+    const step = W / (waveVals.length - 1)
+    const x = hoverIdx * step
+    const y = H - pad - ((waveVals[hoverIdx] - min) / range) * (H - pad * 2)
+    return { x, y }
+  }, [hoverIdx, waveVals])
+
+  const handleWaveMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    const idx = Math.round(ratio * (waveVals.length - 1))
+    setHoverIdx(Math.max(0, Math.min(waveVals.length - 1, idx)))
+  }, [waveVals.length])
+
+  const handleWaveMouseLeave = useCallback(() => setHoverIdx(null), [])
+
   return (
     <button
       type="button"
@@ -155,13 +182,13 @@ export const GridCard = memo(function GridCard({
       className="text-left cursor-pointer relative flex flex-col"
       style={{
         // wireframe: border 1.5px, card.alert → alert border, card.warn → warn border
-        border: `1.5px solid ${status === 'ok' ? 'hsl(var(--border) / 0.7)' : color}`,
+        border: `1.5px solid ${status === 'ok' || status === 'offline' ? 'hsl(var(--border) / 0.7)' : STATUS_COLOR[status]}`,
         background: 'hsl(var(--card) / 0.78)',
         borderRadius: 6,
-        // wireframe: padding: 12px 14px 10px; gap: 8px; min-height: 168px
         padding: '12px 14px 10px',
         gap: 8,
         minHeight: 168,
+        ...(status === 'offline' && { filter: 'grayscale(0.9)', opacity: 0.5 }),
       }}
     >
 
@@ -219,20 +246,28 @@ export const GridCard = memo(function GridCard({
         />
       </div>
 
-      {/* ── where: ISP · Location ── */}
-      {/* wireframe: font-size:10px; letter-spacing:.08em; color:var(--ink-3) */}
-      <div style={{
-        fontFamily: 'JetBrains Mono, ui-monospace, monospace',
-        fontSize: 10,
-        color: 'hsl(var(--muted-foreground))',
-        letterSpacing: '0.08em',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {[node.source, node.meta?.region].filter(Boolean).join(' · ')}
-      </div>
+
+      {/* ── CPU 型号 + 内存大小 ── */}
+      {(() => {
+        const cpu = cpuLabel(node)
+        const totalMem = node.dynamic?.total_memory
+        const memStr = totalMem ? `${(totalMem / 1024 ** 3).toFixed(0)} GB` : null
+        const text = [cpu, memStr].filter(Boolean).join(' · ')
+        if (!text) return null
+        return (
+          <div style={{
+            fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+            fontSize: 9,
+            color: 'hsl(var(--muted-foreground))',
+            letterSpacing: '0.04em',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {text}
+          </div>
+        )
+      })()}
 
       {/* ── bars: CPU / MEM / DSK ── */}
-      {/* wireframe: .bars { display:flex; flex-direction:column; gap:4px } */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <BarRow label="CPU"  value={u.cpu} />
         <BarRow label="MEM"  value={u.mem} />
@@ -241,19 +276,64 @@ export const GridCard = memo(function GridCard({
 
       {/* ── waveform: height 36px ── */}
       {/* wireframe: .waveform { height:36px; margin-top:2px } */}
-      <div style={{ height: 36, marginTop: 2, color: 'hsl(var(--muted-foreground))' }}>
+      <div style={{ height: 36, marginTop: 2, color: 'hsl(var(--muted-foreground))', position: 'relative' }}>
         {wavePath ? (
-          <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-            <path
-              d={`${wavePath} L ${W} ${H} L 0 ${H} Z`}
-              fill="currentColor" opacity={0.08}
-            />
-            <path
-              d={wavePath} fill="none"
-              stroke="currentColor" strokeWidth={1.3}
-              strokeLinecap="round" strokeLinejoin="round"
-            />
-          </svg>
+          <>
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              preserveAspectRatio="none"
+              style={{ width: '100%', height: '100%', display: 'block' }}
+              onMouseMove={handleWaveMouseMove}
+              onMouseLeave={handleWaveMouseLeave}
+            >
+              <path d={`${wavePath} L ${W} ${H} L 0 ${H} Z`} fill="currentColor" opacity={0.08} />
+              <path d={wavePath} fill="none" stroke="currentColor" strokeWidth={1.3}
+                strokeLinecap="round" strokeLinejoin="round" />
+              {hoverPoint && (
+                <>
+                  <line
+                    x1={hoverPoint.x} y1={0} x2={hoverPoint.x} y2={H}
+                    stroke="currentColor" strokeWidth={0.8} strokeDasharray="2 2" opacity={0.5}
+                  />
+                  <circle
+                    cx={hoverPoint.x} cy={hoverPoint.y} r={2.5}
+                    fill="hsl(var(--background))" stroke="currentColor" strokeWidth={1.5}
+                  />
+                </>
+              )}
+            </svg>
+            {hoverIdx !== null && hoverPoint && node.history[hoverIdx] && (() => {
+              const s = node.history[hoverIdx]
+              const leftPct = Math.min(Math.max((hoverPoint.x / W) * 100, 18), 82)
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    left: `${leftPct}%`,
+                    transform: 'translateX(-50%)',
+                    marginBottom: 4,
+                    background: 'hsl(var(--popover) / 0.95)',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 4,
+                    padding: '3px 7px',
+                    fontSize: 9,
+                    fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+                    color: 'hsl(var(--foreground))',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                    zIndex: 50,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <div>↓{bytes(s.netIn ?? 0)}/s ↑{bytes(s.netOut ?? 0)}/s</div>
+                  <div style={{ color: 'hsl(var(--muted-foreground))' }}>
+                    {new Date(s.t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              )
+            })()}
+          </>
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.2, fontSize: 9, fontFamily: 'monospace' }}>
             no data
@@ -289,7 +369,7 @@ export const GridCard = memo(function GridCard({
                   <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>{lbl}</span>
                   {/* wireframe: .v { font-family:'JetBrains Mono'; font-size:10px; color:var(--ink) } */}
                   <span style={{ fontSize: 10, color: 'hsl(var(--foreground))' }}>
-                    {ping != null ? `${ping}ms` : '—'}
+                    {ping != null ? `${Math.round(ping)}ms` : '—'}
                   </span>
                 </span>
               )
